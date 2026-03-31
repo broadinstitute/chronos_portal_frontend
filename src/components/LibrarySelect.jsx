@@ -1,51 +1,26 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
-export function LibrarySelect({ jobId, jobName, onUpload }) {
+export function LibrarySelect({ onFileSelect }) {
   const [selection, setSelection] = useState('Custom')
   const [file, setFile] = useState(null)
   const [format, setFormat] = useState('csv')
-  const [isUploading, setIsUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef(null)
 
   const isCustom = selection === 'Custom'
 
-  const handleFile = async (selectedFile) => {
+  const handleFile = (selectedFile) => {
     if (!selectedFile || !isCustom) return
-
     setFile(selectedFile)
-    setIsUploading(true)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('file_format', format)
-      if (jobId) {
-        formData.append('job_id', jobId)
-      }
-      if (jobName) {
-        formData.append('job_name', jobName)
-      }
-
-      const response = await fetch('/api/upload/guide_map', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.detail || 'Upload failed')
-      }
-
-      onUpload?.(result)
-    } catch (error) {
-      alert(`Error uploading library: ${error.message}`)
-      setFile(null)
-    } finally {
-      setIsUploading(false)
-    }
+    onFileSelect?.({ file: selectedFile, format, filename: selectedFile.name })
   }
+
+  // Update parent when format changes for already-selected file
+  useEffect(() => {
+    if (file && isCustom) {
+      onFileSelect?.({ file, format, filename: file.name })
+    }
+  }, [format])
 
   const handleDrop = (e) => {
     e.preventDefault()
@@ -72,9 +47,7 @@ export function LibrarySelect({ jobId, jobName, onUpload }) {
     handleFile(e.target.files[0])
   }
 
-  const displayText = isUploading
-    ? 'Uploading...'
-    : file && isCustom
+  const displayText = file && isCustom
     ? file.name
     : isCustom
     ? 'Click or drag to upload'

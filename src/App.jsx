@@ -6,17 +6,21 @@ import { LibrarySelect } from './components/LibrarySelect'
 import { CompareInput } from './components/CompareInput'
 import { StatusBar } from './components/StatusBar'
 import { ErrorModal } from './components/ErrorModal'
+import { ResultsPage } from './components/ResultsPage'
+import { Sidebar } from './components/Sidebar'
 
 function App() {
   const [jobName, setJobName] = useState('')
   const [jobId, setJobId] = useState(null)
-  const [uploadedFiles, setUploadedFiles] = useState({})
+  const [pendingFiles, setPendingFiles] = useState({})
   const [condition1, setCondition1] = useState('')
   const [condition2, setCondition2] = useState('')
   const [status, setStatus] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [viewingJobId, setViewingJobId] = useState(null)
 
   const wsUrl = `ws://${window.location.hostname}:8000/ws`
   const { isConnected, lastMessage } = useWebSocket(wsUrl)
@@ -30,6 +34,8 @@ function App() {
 
       if (lastMessage.status === 'complete') {
         setIsRunning(false)
+        setShowResults(true)
+        setViewingJobId(jobId)
       }
     } else if (lastMessage.type === 'error') {
       setError(lastMessage.error)
@@ -37,14 +43,10 @@ function App() {
       setStatus('error')
       setStatusMessage('An error occurred')
     }
-  }, [lastMessage])
+  }, [lastMessage, jobId])
 
-  const handleUpload = (fileType) => (result) => {
-    // Store job_id from first upload
-    if (result.job_id && !jobId) {
-      setJobId(result.job_id)
-    }
-    setUploadedFiles((prev) => ({ ...prev, [fileType]: result }))
+  const handleFileSelect = (fileType) => (fileInfo) => {
+    setPendingFiles((prev) => ({ ...prev, [fileType]: fileInfo }))
   }
 
   const handleCompareChange = (c1, c2) => {
@@ -53,43 +55,76 @@ function App() {
   }
 
   const canRunQC =
-    uploadedFiles.readcounts &&
-    uploadedFiles.condition_map &&
-    uploadedFiles.guide_map &&
-    uploadedFiles.positive_controls &&
-    uploadedFiles.negative_controls &&
+    pendingFiles.readcounts &&
+    pendingFiles.condition_map &&
+    pendingFiles.guide_map &&
+    pendingFiles.positive_controls &&
+    pendingFiles.negative_controls &&
     !isRunning
 
   const handleRunQC = async () => {
     setIsRunning(true)
     setStatus('running')
-    setStatusMessage('Initializing...')
     setError(null)
 
+    const fileTypes = ['readcounts', 'condition_map', 'guide_map', 'copy_number', 'positive_controls', 'negative_controls']
+    let currentJobId = null
+
     try {
-      const response = await fetch('/api/run-qc', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ job_id: jobId, title: jobName || 'Untitled Analysis' }),
-      })
+      // Upload files sequentially
+      for (const fileType of fileTypes) {
+        const fileInfo = pendingFiles[fileType]
+        if (!fileInfo) continue
 
-      const result = await response.json()
+        setStatusMessage(`Uploading ${fileType.replace('_', ' ')}...`)
 
-      if (!response.ok) {
-        throw new Error(result.detail || 'Failed to start QC')
+        const formData = new FormData()
+        formData.append('file', fileInfo.file)
+        formData.append('file_format', fileInfo.format)
+        formData.append('job_name', jobName || 'Untitled Analysis')
+        if (currentJobId) {
+          formData.append('job_id', currentJobId)
+        }
+
+        const response = await fetch(`/api/upload/${fileType}`, {
+          method: 'POST',
+          body: formData,
+        })
+
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${fileType}: ${result.detail}`)
+        }
+
+        // Capture job_id from first upload
+        if (result.job_id && !currentJobId) {
+          currentJobId = result.job_id
+          setJobId(currentJobId)
+        }
       }
 
-      // Update job_id if returned
-      if (result.job_id) {
-        setJobId(result.job_id)
+      // Now start QC
+      setStatusMessage('Starting QC analysis...')
+      const qcResponse = await fetch('/api/run-qc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: currentJobId,
+          title: jobName || 'Untitled Analysis',
+          condition1: condition1 || null,
+          condition2: condition2 || null,
+        }),
+      })
+
+      const qcResult = await qcResponse.json()
+      if (!qcResponse.ok) {
+        throw new Error(qcResult.detail || 'Failed to start QC')
       }
     } catch (err) {
       setError(err.message)
       setIsRunning(false)
       setStatus('error')
-      setStatusMessage('Failed to start')
+      setStatusMessage('Failed')
     }
   }
 
@@ -101,87 +136,95 @@ function App() {
     }
   }
 
+  const handleBackFromResults = () => {
+    setShowResults(false)
+    setViewingJobId(null)
+  }
+
+  const handleSelectJob = (selectedJobId) => {
+    setViewingJobId(selectedJobId)
+    setShowResults(true)
+  }
+
+  if (showResults && viewingJobId) {
+    return <ResultsPage jobId={viewingJobId} onBack={handleBackFromResults} />
+  }
+
   return (
-    <div className="app">
-      <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-        {isConnected ? 'Connected' : 'Disconnected'}
-      </div>
+    <div className="app-layout">
+      <Sidebar onSelectJob={handleSelectJob} />
 
-      <header className="header">
-        <h1>CRISPR Analysis Portal</h1>
-        <p>Upload your screen data and run Chronos QC analysis</p>
-      </header>
+      <main className="app">
+        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+          {isConnected ? 'Connected' : 'Disconnected'}
+        </div>
 
-      <div className="section">
-        <div className="section-row">
-          <span className="section-label">Job name</span>
-          <input
-            type="text"
-            className="job-name-input"
-            placeholder="Enter a name for this analysis"
-            value={jobName}
-            onChange={(e) => setJobName(e.target.value)}
-            disabled={!!jobId}
+        <header className="header">
+          <h1>CRISPR Analysis Portal</h1>
+          <p>Upload your screen data and run Chronos QC analysis</p>
+        </header>
+
+        <div className="section">
+          <div className="section-row">
+            <span className="section-label">Job name</span>
+            <input
+              type="text"
+              className="job-name-input"
+              placeholder="Enter a name for this analysis"
+              value={jobName}
+              onChange={(e) => setJobName(e.target.value)}
+              disabled={isRunning}
+            />
+          </div>
+        </div>
+
+        <FileUpload
+          label="CRISPR Reads"
+          fileType="readcounts"
+          onFileSelect={handleFileSelect('readcounts')}
+        />
+
+        <FileUpload
+          label="Condition map"
+          fileType="condition_map"
+          onFileSelect={handleFileSelect('condition_map')}
+        />
+
+        <LibrarySelect onFileSelect={handleFileSelect('guide_map')} />
+
+        <FileUpload
+          label="Copy number"
+          fileType="copy_number"
+          onFileSelect={handleFileSelect('copy_number')}
+          optional
+        />
+
+        <div className="controls-section">
+          <ControlsUpload
+            label="Custom negative controls"
+            fileType="negative_controls"
+            onFileSelect={handleFileSelect('negative_controls')}
+          />
+          <ControlsUpload
+            label="Custom positive controls"
+            fileType="positive_controls"
+            onFileSelect={handleFileSelect('positive_controls')}
           />
         </div>
-      </div>
 
-      <FileUpload
-        label="CRISPR Reads"
-        fileType="readcounts"
-        jobId={jobId}
-        jobName={jobName}
-        onUpload={handleUpload('readcounts')}
-      />
-
-      <FileUpload
-        label="Condition map"
-        fileType="condition_map"
-        jobId={jobId}
-        jobName={jobName}
-        onUpload={handleUpload('condition_map')}
-      />
-
-      <LibrarySelect jobId={jobId} jobName={jobName} onUpload={handleUpload('guide_map')} />
-
-      <FileUpload
-        label="Copy number"
-        fileType="copy_number"
-        jobId={jobId}
-        jobName={jobName}
-        onUpload={handleUpload('copy_number')}
-        optional
-      />
-
-      <div className="controls-section">
-        <ControlsUpload
-          label="Custom negative controls"
-          fileType="negative_controls"
-          jobId={jobId}
-          jobName={jobName}
-          onUpload={handleUpload('negative_controls')}
+        <CompareInput
+          condition1={condition1}
+          condition2={condition2}
+          onChange={handleCompareChange}
         />
-        <ControlsUpload
-          label="Custom positive controls"
-          fileType="positive_controls"
-          jobId={jobId}
-          jobName={jobName}
-          onUpload={handleUpload('positive_controls')}
-        />
-      </div>
 
-      <CompareInput
-        condition1={condition1}
-        condition2={condition2}
-        onChange={handleCompareChange}
-      />
+        <button className="run-button" disabled={!canRunQC} onClick={handleRunQC}>
+          Run Initial QC
+        </button>
 
-      <button className="run-button" disabled={!canRunQC} onClick={handleRunQC}>
-        Run Initial QC
-      </button>
-
-      <StatusBar status={status} message={statusMessage} />
-      <ErrorModal error={error} onClose={handleErrorClose} />
+        <StatusBar status={status} message={statusMessage} />
+        <ErrorModal error={error} onClose={handleErrorClose} />
+      </main>
     </div>
   )
 }

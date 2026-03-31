@@ -1,46 +1,14 @@
 import { useState, useRef } from 'react'
 
-export function ControlsUpload({ label, fileType, jobId, jobName, onUpload }) {
+export function ControlsUpload({ label, fileType, onFileSelect }) {
   const [file, setFile] = useState(null)
-  const [isUploading, setIsUploading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef(null)
 
-  const handleFile = async (selectedFile) => {
+  const handleFile = (selectedFile) => {
     if (!selectedFile) return
-
     setFile(selectedFile)
-    setIsUploading(true)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('file_format', 'txt')
-      if (jobId) {
-        formData.append('job_id', jobId)
-      }
-      if (jobName) {
-        formData.append('job_name', jobName)
-      }
-
-      const response = await fetch(`/api/upload/${fileType}`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.detail || 'Upload failed')
-      }
-
-      onUpload?.(result)
-    } catch (error) {
-      alert(`Error uploading ${label}: ${error.message}`)
-      setFile(null)
-    } finally {
-      setIsUploading(false)
-    }
+    onFileSelect?.({ file: selectedFile, format: 'txt', filename: selectedFile.name })
   }
 
   const handleDrop = (e) => {
@@ -67,11 +35,7 @@ export function ControlsUpload({ label, fileType, jobId, jobName, onUpload }) {
     handleFile(e.target.files[0])
   }
 
-  const displayText = isUploading
-    ? 'Uploading...'
-    : file
-    ? file.name
-    : 'Click or drag to upload'
+  const displayText = file ? file.name : 'Click or drag to upload'
 
   const className = `file-display${file ? ' has-file' : ''}${isDragOver ? ' dragover' : ''}`
 
