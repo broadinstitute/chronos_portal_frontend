@@ -1,0 +1,287 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #f5f7fa;
+  color: #1a2b3c;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  color: #1a4d5c;
+  margin-bottom: 0.5rem;
+}
+
+.header p {
+  color: #5a6b7c;
+  font-size: 0.9rem;
+}
+
+.section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e0e5ea;
+}
+
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.section-label {
+  min-width: 140px;
+  font-weight: 500;
+  color: #1a4d5c;
+}
+
+.file-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-display {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: #f5f7fa;
+  border: 1px dashed #c0c8d0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #5a6b7c;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.file-display:hover {
+  border-color: #1a4d5c;
+  background: #eef2f5;
+}
+
+.file-display.has-file {
+  border-style: solid;
+  border-color: #2a8d5c;
+  background: #e8f5ee;
+  color: #1a5d3c;
+}
+
+.file-display.dragover {
+  border-color: #1a4d5c;
+  background: #e0f0f5;
+}
+
+.file-display.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.format-select {
+  padding: 0.5rem;
+  border: 1px solid #c0c8d0;
+  border-radius: 4px;
+  background: #fff;
+  color: #1a2b3c;
+  cursor: pointer;
+}
+
+.optional-tag {
+  font-size: 0.75rem;
+  color: #8a9bac;
+  margin-left: 0.25rem;
+}
+
+.controls-section {
+  display: flex;
+  gap: 1rem;
+}
+
+.controls-section .section {
+  flex: 1;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+.radio-option input {
+  accent-color: #1a4d5c;
+}
+
+.job-name-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #c0c8d0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.job-name-input:disabled {
+  background: #f5f7fa;
+  color: #5a6b7c;
+}
+
+.compare-section .section-row {
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.compare-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #c0c8d0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.compare-with {
+  color: #5a6b7c;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.run-button {
+  width: 100%;
+  padding: 1rem;
+  background: #1a4d5c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.run-button:hover:not(:disabled) {
+  background: #0d3a47;
+}
+
+.run-button:disabled {
+  background: #b0c0c8;
+  cursor: not-allowed;
+}
+
+.status-bar {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.status-bar.running {
+  background: #e0f0f5;
+  color: #1a4d5c;
+}
+
+.status-bar.complete {
+  background: #e8f5ee;
+  color: #1a5d3c;
+}
+
+.status-bar.error {
+  background: #fde8e8;
+  color: #9b1c1c;
+}
+
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #1a4d5c;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.error-modal-content {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  max-width: 400px;
+  text-align: center;
+}
+
+.error-modal-content h3 {
+  color: #9b1c1c;
+  margin-bottom: 1rem;
+}
+
+.error-modal-content p {
+  margin-bottom: 1.5rem;
+  color: #5a6b7c;
+}
+
+.error-modal-content button {
+  padding: 0.5rem 1.5rem;
+  background: #1a4d5c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.connection-status {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.connection-status.connected {
+  background: #e8f5ee;
+  color: #1a5d3c;
+}
+
+.connection-status.disconnected {
+  background: #fde8e8;
+  color: #9b1c1c;
+}
