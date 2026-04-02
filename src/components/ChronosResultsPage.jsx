@@ -8,23 +8,38 @@ export function ChronosResultsPage({ jobId, title, onBack }) {
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [sections, setSections] = useState([])
+  const [activeTab, setActiveTab] = useState(null)
 
   useEffect(() => {
-    async function fetchFiles() {
+    async function fetchData() {
       try {
-        const response = await fetch(`/api/outputs/${jobId}`)
-        if (response.ok) {
-          const data = await response.json()
+        // Fetch files and QC report in parallel
+        const [filesRes, qcRes] = await Promise.all([
+          fetch(`/api/outputs/${jobId}`),
+          fetch(`/api/reports/${jobId}/chronos-qc`),
+        ])
+
+        if (filesRes.ok) {
+          const data = await filesRes.json()
           setFiles(data.files)
         }
+
+        if (qcRes.ok) {
+          const data = await qcRes.json()
+          setSections(data.sections)
+          if (data.sections.length > 0) {
+            setActiveTab(data.sections[0].id)
+          }
+        }
       } catch (err) {
-        console.error('Failed to fetch files:', err)
+        console.error('Failed to fetch data:', err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchFiles()
+    fetchData()
   }, [jobId])
 
   const toggleSelect = (file) => {
@@ -98,6 +113,8 @@ export function ChronosResultsPage({ jobId, title, onBack }) {
     }
   }
 
+  const activeSection = sections.find((s) => s.id === activeTab)
+
   if (loading) {
     return (
       <div className="chronos-results-page">
@@ -115,48 +132,89 @@ export function ChronosResultsPage({ jobId, title, onBack }) {
         <button className="back-button" onClick={onBack}>
           Back
         </button>
-        <h1>{title} - Chronos Outputs</h1>
+        <h1>{title} - Chronos Results</h1>
       </header>
 
-      <div className="files-container">
-        <div className="files-header">
-          <label className="select-all">
-            <input
-              type="checkbox"
-              checked={selected.size === files.length && files.length > 0}
-              onChange={selectAll}
-            />
-            Select All
-          </label>
-          <span className="files-count">
-            {selected.size} of {files.length} selected
-          </span>
+      <div className="chronos-layout">
+        {/* Main content area with tabs */}
+        <div className="chronos-main">
+          {sections.length > 0 && (
+            <>
+              <div className="chronos-tabs">
+                {sections.map((section) => (
+                  <button
+                    key={section.id}
+                    className={`chronos-tab ${activeTab === section.id ? 'active' : ''}`}
+                    onClick={() => setActiveTab(section.id)}
+                  >
+                    {section.title}
+                  </button>
+                ))}
+              </div>
+
+              {activeSection && (
+                <div className="chronos-section-content">
+                  <h2>{activeSection.title}</h2>
+                  {activeSection.text && (
+                    <p className="section-text">{activeSection.text}</p>
+                  )}
+                  <div className="section-images">
+                    {activeSection.image_urls.map((url, idx) => (
+                      <img key={idx} src={url} alt={`${activeSection.title} ${idx + 1}`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {sections.length === 0 && (
+            <div className="no-sections">
+              <p>No QC report sections available.</p>
+            </div>
+          )}
         </div>
 
-        <div className="files-list">
-          {files.map((file) => (
-            <label key={fileKey(file)} className="file-item">
+        {/* Sidebar with download list */}
+        <div className="chronos-sidebar">
+          <h3>Download Outputs</h3>
+
+          <div className="files-header">
+            <label className="select-all">
               <input
                 type="checkbox"
-                checked={selected.has(fileKey(file))}
-                onChange={() => toggleSelect(file)}
+                checked={selected.size === files.length && files.length > 0}
+                onChange={selectAll}
               />
-              <span className="file-name">{file.name}</span>
-              <span className="file-source">{file.source}</span>
-              <span className="file-size">{formatSize(file.size)}</span>
+              Select All
             </label>
-          ))}
-        </div>
-      </div>
+            <span className="files-count">
+              {selected.size} of {files.length}
+            </span>
+          </div>
 
-      <div className="results-actions">
-        <button
-          className="run-button"
-          disabled={selected.size === 0 || downloading}
-          onClick={handleDownload}
-        >
-          {downloading ? 'Downloading...' : `Download${selected.size > 1 ? ' (ZIP)' : ''}`}
-        </button>
+          <div className="files-list">
+            {files.map((file) => (
+              <label key={fileKey(file)} className="file-item">
+                <input
+                  type="checkbox"
+                  checked={selected.has(fileKey(file))}
+                  onChange={() => toggleSelect(file)}
+                />
+                <span className="file-name">{file.name}</span>
+                <span className="file-size">{formatSize(file.size)}</span>
+              </label>
+            ))}
+          </div>
+
+          <button
+            className="download-button"
+            disabled={selected.size === 0 || downloading}
+            onClick={handleDownload}
+          >
+            {downloading ? 'Downloading...' : `Download${selected.size > 1 ? ' (ZIP)' : ''}`}
+          </button>
+        </div>
       </div>
     </div>
   )

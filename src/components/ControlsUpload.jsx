@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
+import { HelpTooltip } from './HelpTooltip'
 
-export function ControlsUpload({ label, fileType, onFileSelect }) {
+export function ControlsUpload({ label, fileType, onFileSelect, optional = false, helpText }) {
   const [file, setFile] = useState(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef(null)
@@ -41,7 +42,11 @@ export function ControlsUpload({ label, fileType, onFileSelect }) {
 
   return (
     <div className="section">
-      <span className="section-label">{label}</span>
+      <span className="section-label">
+        {label}
+        {optional && <span className="optional-tag">(optional)</span>}
+        {helpText && <HelpTooltip text={helpText} />}
+      </span>
       <div
         className={className}
         onClick={handleClick}

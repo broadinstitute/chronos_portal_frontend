@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import { HelpTooltip } from './HelpTooltip'
+
+const DEFAULT_FORMATS = ['csv', 'tsv']
+const MATRIX_FORMATS = ['csv', 'tsv', 'hdf5']
 
 export function FileUpload({
   label,
@@ -6,7 +10,10 @@ export function FileUpload({
   onFileSelect,
   optional = false,
   showFormatSelect = true,
+  allowHdf5 = false,
+  helpText,
 }) {
+  const formats = allowHdf5 ? MATRIX_FORMATS : DEFAULT_FORMATS
   const [file, setFile] = useState(null)
   const [format, setFormat] = useState('csv')
   const [isDragOver, setIsDragOver] = useState(false)
@@ -59,6 +66,7 @@ export function FileUpload({
         <span className="section-label">
           {label}
           {optional && <span className="optional-tag">(optional)</span>}
+          {helpText && <HelpTooltip text={helpText} />}
         </span>
         <div className="file-input-wrapper">
           <div
@@ -76,8 +84,9 @@ export function FileUpload({
               value={format}
               onChange={(e) => setFormat(e.target.value)}
             >
-              <option value="csv">csv</option>
-              <option value="tsv">tsv</option>
+              {formats.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
             </select>
           )}
           <input

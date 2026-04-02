@@ -9,10 +9,22 @@ import { ErrorModal } from './components/ErrorModal'
 import { ResultsPage } from './components/ResultsPage'
 import { Sidebar } from './components/Sidebar'
 
+// Help text from Chronos docstrings
+const HELP_TEXT = {
+  readcounts: "Matrix with sequenced entities (replicates) on rows, guides as column headers, and total readcounts for the guide in the replicate as entries.",
+  condition_map: "Table with columns: sequence_ID (matches row index in readcounts), cell_line (name or 'pDNA'), days (cell days from infection), pDNA_batch (links late timepoints to time 0 counts). Optional: replicate, condition.",
+  guide_map: "Table with columns: sgrna (guide sequence or unique identifier) and gene (gene mapped to by guide).",
+  copy_number: "Cell-line by gene matrix of relative (floating point) copy number. Used to correct for copy number effects after Chronos inference.",
+  negative_controls: "A list of negative control genes.",
+  positive_controls: "A list of positive control genes.",
+  compare: "Compute differential dependency between these two conditions. Requires a minimum of two biological replicates per cell line in each condition.",
+}
+
 function App() {
   const [jobName, setJobName] = useState('')
   const [jobId, setJobId] = useState(null)
   const [pendingFiles, setPendingFiles] = useState({})
+  const [selectedLibrary, setSelectedLibrary] = useState(null)
   const [condition1, setCondition1] = useState('')
   const [condition2, setCondition2] = useState('')
   const [status, setStatus] = useState(null)
@@ -54,12 +66,11 @@ function App() {
     setCondition2(c2)
   }
 
+  const hasGuideMap = pendingFiles.guide_map || selectedLibrary
   const canRunQC =
     pendingFiles.readcounts &&
     pendingFiles.condition_map &&
-    pendingFiles.guide_map &&
-    pendingFiles.positive_controls &&
-    pendingFiles.negative_controls &&
+    hasGuideMap &&
     !isRunning
 
   const handleRunQC = async () => {
@@ -67,7 +78,11 @@ function App() {
     setStatus('running')
     setError(null)
 
-    const fileTypes = ['readcounts', 'condition_map', 'guide_map', 'copy_number', 'positive_controls', 'negative_controls']
+    // Files to upload (exclude guide_map if using built-in library)
+    const fileTypes = ['readcounts', 'condition_map', 'copy_number', 'positive_controls', 'negative_controls']
+    if (pendingFiles.guide_map) {
+      fileTypes.splice(2, 0, 'guide_map')  // Insert after condition_map
+    }
     let currentJobId = null
 
     try {
@@ -99,6 +114,32 @@ function App() {
         // Capture job_id from first upload
         if (result.job_id && !currentJobId) {
           currentJobId = result.job_id
+          setJobId(currentJobId)
+        }
+      }
+
+      // If using a built-in library, set it now
+      if (selectedLibrary) {
+        setStatusMessage('Setting library...')
+        const formData = new FormData()
+        formData.append('job_name', jobName || 'Untitled Analysis')
+        if (currentJobId) {
+          formData.append('job_id', currentJobId)
+        }
+
+        const libResponse = await fetch(`/api/set-library/${selectedLibrary}`, {
+          method: 'POST',
+          body: formData,
+        })
+
+        const libResult = await libResponse.json()
+        if (!libResponse.ok) {
+          throw new Error(`Failed to set library: ${libResult.detail}`)
+        }
+
+        // Capture job_id if this was the first action
+        if (libResult.job_id && !currentJobId) {
+          currentJobId = libResult.job_id
           setJobId(currentJobId)
         }
       }
@@ -182,33 +223,46 @@ function App() {
           label="CRISPR Reads"
           fileType="readcounts"
           onFileSelect={handleFileSelect('readcounts')}
+          allowHdf5
+          helpText={HELP_TEXT.readcounts}
         />
 
         <FileUpload
           label="Condition map"
           fileType="condition_map"
           onFileSelect={handleFileSelect('condition_map')}
+          helpText={HELP_TEXT.condition_map}
         />
 
-        <LibrarySelect onFileSelect={handleFileSelect('guide_map')} />
+        <LibrarySelect
+          onFileSelect={handleFileSelect('guide_map')}
+          onLibrarySelect={setSelectedLibrary}
+          helpText={HELP_TEXT.guide_map}
+        />
 
         <FileUpload
           label="Copy number"
           fileType="copy_number"
           onFileSelect={handleFileSelect('copy_number')}
           optional
+          allowHdf5
+          helpText={HELP_TEXT.copy_number}
         />
 
         <div className="controls-section">
           <ControlsUpload
-            label="Custom negative controls"
+            label="Negative controls"
             fileType="negative_controls"
             onFileSelect={handleFileSelect('negative_controls')}
+            optional
+            helpText={HELP_TEXT.negative_controls}
           />
           <ControlsUpload
-            label="Custom positive controls"
+            label="Positive controls"
             fileType="positive_controls"
             onFileSelect={handleFileSelect('positive_controls')}
+            optional
+            helpText={HELP_TEXT.positive_controls}
           />
         </div>
 
@@ -216,6 +270,7 @@ function App() {
           condition1={condition1}
           condition2={condition2}
           onChange={handleCompareChange}
+          helpText={HELP_TEXT.compare}
         />
 
         <button className="run-button" disabled={!canRunQC} onClick={handleRunQC}>
