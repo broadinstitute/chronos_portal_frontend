@@ -3,11 +3,25 @@ import { useWebSocket } from './hooks/useWebSocket'
 import { FileUpload } from './components/FileUpload'
 import { ControlsUpload } from './components/ControlsUpload'
 import { LibrarySelect } from './components/LibrarySelect'
-import { CompareInput, isCompareValid } from './components/CompareInput'
 import { StatusBar } from './components/StatusBar'
 import { ErrorModal } from './components/ErrorModal'
 import { ResultsPage } from './components/ResultsPage'
 import { Sidebar } from './components/Sidebar'
+
+// Generate a job ID (same format as server)
+function generateJobId(name) {
+  const sanitized = name
+    ? name.replace(/[^\w-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 50) || 'job'
+    : 'job'
+  const now = new Date()
+  const timestamp = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0')
+  return `${sanitized}_${timestamp}`
+}
 
 // Help text from Chronos docstrings
 const HELP_TEXT = {
@@ -17,7 +31,6 @@ const HELP_TEXT = {
   copy_number: "Cell-line by gene matrix of relative (floating point) copy number. Used to correct for copy number effects after Chronos inference.",
   negative_controls: "A list of negative control genes.",
   positive_controls: "A list of positive control genes.",
-  compare: "Compute differential dependency between these two conditions. Requires a minimum of two biological replicates per cell line in each condition.",
 }
 
 function App() {
@@ -26,8 +39,6 @@ function App() {
   const [pendingFiles, setPendingFiles] = useState({})
   const [selectedLibrary, setSelectedLibrary] = useState(null)
   const [usePretrained, setUsePretrained] = useState(true)
-  const [condition1, setCondition1] = useState('')
-  const [condition2, setCondition2] = useState('')
   const [status, setStatus] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState(null)
@@ -41,6 +52,14 @@ function App() {
   useEffect(() => {
     if (!lastMessage) return
 
+    // Ignore all messages if no job selected (landing page)
+    if (!jobId) return
+
+    // Only handle messages for current job
+    if (lastMessage.job_id && lastMessage.job_id !== jobId) {
+      return
+    }
+
     if (lastMessage.type === 'status') {
       setStatus(lastMessage.status)
       setStatusMessage(lastMessage.message)
@@ -48,35 +67,36 @@ function App() {
       if (lastMessage.status === 'complete' && lastMessage.job_id) {
         setIsRunning(false)
         setShowResults(true)
-        setViewingJobId(lastMessage.job_id)  // Use job_id from message, not stale state
+        setViewingJobId(lastMessage.job_id)
       }
     } else if (lastMessage.type === 'error') {
       setError(lastMessage.error)
       setIsRunning(false)
       setStatus('error')
       setStatusMessage('An error occurred')
+      // Only nullify jobId on landing page (not when viewing results)
+      if (!showResults) {
+        setJobId(null)
+      }
     }
-  }, [lastMessage])
+  }, [lastMessage, jobId, showResults])
 
   const handleFileSelect = (fileType) => (fileInfo) => {
     setPendingFiles((prev) => ({ ...prev, [fileType]: fileInfo }))
   }
 
-  const handleCompareChange = (c1, c2) => {
-    setCondition1(c1)
-    setCondition2(c2)
-  }
-
   const hasGuideMap = pendingFiles.guide_map || selectedLibrary
-  const compareValid = isCompareValid(condition1, condition2)
   const canRunQC =
     pendingFiles.readcounts &&
     pendingFiles.condition_map &&
     hasGuideMap &&
-    compareValid &&
     !isRunning
 
   const handleRunQC = async () => {
+    // Generate job ID upfront before any API calls
+    const newJobId = generateJobId(jobName || 'Untitled Analysis')
+    setJobId(newJobId)
+
     setIsRunning(true)
     setStatus('running')
     setError(null)
@@ -86,7 +106,6 @@ function App() {
     if (pendingFiles.guide_map) {
       fileTypes.splice(2, 0, 'guide_map')  // Insert after condition_map
     }
-    let currentJobId = null
 
     try {
       // Upload files sequentially
@@ -100,9 +119,7 @@ function App() {
         formData.append('file', fileInfo.file)
         formData.append('file_format', fileInfo.format)
         formData.append('job_name', jobName || 'Untitled Analysis')
-        if (currentJobId) {
-          formData.append('job_id', currentJobId)
-        }
+        formData.append('job_id', newJobId)
 
         const response = await fetch(`/api/upload/${fileType}`, {
           method: 'POST',
@@ -113,12 +130,6 @@ function App() {
         if (!response.ok) {
           throw new Error(`Failed to upload ${fileType}: ${result.detail}`)
         }
-
-        // Capture job_id from first upload
-        if (result.job_id && !currentJobId) {
-          currentJobId = result.job_id
-          setJobId(currentJobId)
-        }
       }
 
       // If using a built-in library, set it now
@@ -126,9 +137,7 @@ function App() {
         setStatusMessage('Setting library...')
         const formData = new FormData()
         formData.append('job_name', jobName || 'Untitled Analysis')
-        if (currentJobId) {
-          formData.append('job_id', currentJobId)
-        }
+        formData.append('job_id', newJobId)
 
         const libResponse = await fetch(`/api/set-library/${selectedLibrary}`, {
           method: 'POST',
@@ -139,12 +148,6 @@ function App() {
         if (!libResponse.ok) {
           throw new Error(`Failed to set library: ${libResult.detail}`)
         }
-
-        // Capture job_id if this was the first action
-        if (libResult.job_id && !currentJobId) {
-          currentJobId = libResult.job_id
-          setJobId(currentJobId)
-        }
       }
 
       // Now start QC
@@ -153,10 +156,8 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_id: currentJobId,
+          job_id: newJobId,
           title: jobName || 'Untitled Analysis',
-          condition1: condition1 || null,
-          condition2: condition2 || null,
           use_pretrained: usePretrained,
         }),
       })
@@ -170,6 +171,7 @@ function App() {
       setIsRunning(false)
       setStatus('error')
       setStatusMessage('Failed')
+      setJobId(null)
     }
   }
 
@@ -184,9 +186,11 @@ function App() {
   const handleBackFromResults = () => {
     setShowResults(false)
     setViewingJobId(null)
+    setJobId(null)
   }
 
   const handleSelectJob = (selectedJobId) => {
+    setJobId(selectedJobId)
     setViewingJobId(selectedJobId)
     setShowResults(true)
   }
@@ -270,13 +274,6 @@ function App() {
             helpText={HELP_TEXT.positive_controls}
           />
         </div>
-
-        <CompareInput
-          condition1={condition1}
-          condition2={condition2}
-          onChange={handleCompareChange}
-          helpText={HELP_TEXT.compare}
-        />
 
         <button className="run-button" disabled={!canRunQC} onClick={handleRunQC}>
           Run Initial QC

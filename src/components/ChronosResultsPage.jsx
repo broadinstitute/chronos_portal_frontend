@@ -5,8 +5,10 @@ import { LogDisplay } from './LogDisplay'
 // Create unique key for file (name + source)
 const fileKey = (file) => `${file.source}:${file.name}`
 
-// Tier 1 files (primary outputs) - shown first
-const TIER1_FILES = [
+// File categorization
+const isReportFile = (file) => file.source === 'Reports'
+
+const PRIMARY_OUTPUT_FILES = [
   'gene_effect.csv',
   'gene_effect_corrected.csv',
   'fdr_from_probabilities.csv',
@@ -15,8 +17,8 @@ const TIER1_FILES = [
   'probability_dependent.csv',
 ]
 
-const isTier1File = (file) => {
-  if (TIER1_FILES.includes(file.name)) return true
+const isPrimaryOutput = (file) => {
+  if (PRIMARY_OUTPUT_FILES.includes(file.name)) return true
   if (file.name.startsWith('condition_comparison_')) return true
   return false
 }
@@ -35,9 +37,19 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
   const [activeQcTab, setActiveQcTab] = useState(null)
   const [activeHitsTab, setActiveHitsTab] = useState(null)
 
+  // Differential Dependency state
+  const [ddSections, setDdSections] = useState([])
+  const [activeDdTab, setActiveDdTab] = useState(null)
+  const [ddReportLoading, setDdReportLoading] = useState(false)
+
   const [comparisonRunning, setComparisonRunning] = useState(false)
   const [qcReportLoading, setQcReportLoading] = useState(true)
   const [hitsReportLoading, setHitsReportLoading] = useState(true)
+
+  // Condition comparison state
+  const [availableConditions, setAvailableConditions] = useState([])
+  const [selectedCondition1, setSelectedCondition1] = useState('')
+  const [selectedCondition2, setSelectedCondition2] = useState('')
 
   const wsUrl = `ws://${window.location.hostname}:8000/ws`
   const { lastMessage } = useWebSocket(wsUrl)
@@ -57,16 +69,28 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         setLoading(false)
       }
 
+      // Fetch available conditions
+      try {
+        const condRes = await fetch(`/api/jobs/${jobId}/conditions`)
+        if (condRes.ok) {
+          const data = await condRes.json()
+          setAvailableConditions(data.conditions || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch conditions:', err)
+      }
+
       // Try to fetch reports (may not be ready yet)
       fetchQcReport()
       fetchHitsReport()
+      fetchDdReport()
     }
 
     fetchData()
   }, [jobId])
 
-  // Function to fetch QC report
-  const fetchQcReport = async () => {
+  // Function to fetch QC report (retries on 404)
+  const fetchQcReport = async (retryCount = 0) => {
     try {
       const qcRes = await fetch(`/api/reports/${jobId}/chronos-qc`)
       if (qcRes.ok) {
@@ -76,14 +100,16 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           setActiveQcTab(data.sections[0].id)
           setQcReportLoading(false)
         }
+      } else if (qcRes.status === 404 && retryCount < 10) {
+        setTimeout(() => fetchQcReport(retryCount + 1), 5000)
       }
     } catch (err) {
       console.error('Failed to fetch QC report:', err)
     }
   }
 
-  // Function to fetch Hits report
-  const fetchHitsReport = async () => {
+  // Function to fetch Hits report (retries on 404)
+  const fetchHitsReport = async (retryCount = 0) => {
     try {
       const hitsRes = await fetch(`/api/reports/${jobId}/hits`)
       if (hitsRes.ok) {
@@ -93,9 +119,32 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           setActiveHitsTab(data.sections[0].id)
           setHitsReportLoading(false)
         }
+      } else if (hitsRes.status === 404 && retryCount < 10) {
+        setTimeout(() => fetchHitsReport(retryCount + 1), 5000)
       }
     } catch (err) {
       console.error('Failed to fetch hits report:', err)
+    }
+  }
+
+  // Function to fetch Differential Dependency report
+  // retry=true when called after dd_report_ready status (report is expected)
+  const fetchDdReport = async (retry = false, retryCount = 0) => {
+    try {
+      const ddRes = await fetch(`/api/reports/${jobId}/differential-dependency`)
+      if (ddRes.ok) {
+        const data = await ddRes.json()
+        if (data.sections && data.sections.length > 0) {
+          setDdSections(data.sections)
+          setActiveDdTab(data.sections[0].id)
+          setDdReportLoading(false)
+        }
+      } else if (ddRes.status === 404 && retry && retryCount < 10) {
+        // Only retry if we're expecting the report (after dd_report_ready)
+        setTimeout(() => fetchDdReport(true, retryCount + 1), 5000)
+      }
+    } catch (err) {
+      console.error('Failed to fetch DD report:', err)
     }
   }
 
@@ -117,8 +166,25 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           .catch((err) => console.error('Failed to refresh files:', err))
       } else if (lastMessage.status === 'qc_report_ready') {
         fetchQcReport()
+        // Refresh file list to include new PDF
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files))
+          .catch((err) => console.error('Failed to refresh files:', err))
       } else if (lastMessage.status === 'hits_report_ready') {
         fetchHitsReport()
+        // Refresh file list to include new PDF
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files))
+          .catch((err) => console.error('Failed to refresh files:', err))
+      } else if (lastMessage.status === 'dd_report_ready') {
+        fetchDdReport(true)
+        // Refresh file list to include new PDF
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files))
+          .catch((err) => console.error('Failed to refresh files:', err))
       }
     }
   }, [lastMessage, jobId])
@@ -192,11 +258,65 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
     }
   }
 
+  const handleRunDifferentialDependency = async () => {
+    if (!selectedCondition1 || !selectedCondition2 || selectedCondition1 === selectedCondition2) {
+      return
+    }
+
+    setComparisonRunning(true)
+    setDdReportLoading(true)
+
+    try {
+      const response = await fetch('/api/run-differential-dependency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          condition1: selectedCondition1,
+          condition2: selectedCondition2,
+        }),
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        console.error('Failed to start differential dependency:', result.detail)
+        setComparisonRunning(false)
+        setDdReportLoading(false)
+      }
+    } catch (err) {
+      console.error('Failed to start differential dependency:', err)
+      setComparisonRunning(false)
+      setDdReportLoading(false)
+    }
+  }
+
+  // Check if DD can be run
+  const canRunDd =
+    availableConditions.length >= 2 &&
+    !qcReportLoading &&
+    !hitsReportLoading &&
+    selectedCondition1 &&
+    selectedCondition2 &&
+    selectedCondition1 !== selectedCondition2 &&
+    !comparisonRunning
+
   // Get active sections and tab based on category
-  const currentSections = activeCategory === 'qc' ? qcSections : hitsSections
-  const currentActiveTab = activeCategory === 'qc' ? activeQcTab : activeHitsTab
-  const setCurrentActiveTab = activeCategory === 'qc' ? setActiveQcTab : setActiveHitsTab
-  const currentLoading = activeCategory === 'qc' ? qcReportLoading : hitsReportLoading
+  const currentSections =
+    activeCategory === 'qc' ? qcSections :
+    activeCategory === 'hits' ? hitsSections :
+    ddSections
+  const currentActiveTab =
+    activeCategory === 'qc' ? activeQcTab :
+    activeCategory === 'hits' ? activeHitsTab :
+    activeDdTab
+  const setCurrentActiveTab =
+    activeCategory === 'qc' ? setActiveQcTab :
+    activeCategory === 'hits' ? setActiveHitsTab :
+    setActiveDdTab
+  const currentLoading =
+    activeCategory === 'qc' ? qcReportLoading :
+    activeCategory === 'hits' ? hitsReportLoading :
+    ddReportLoading
 
   const activeSection = currentSections.find((s) => s.id === currentActiveTab)
 
@@ -239,13 +359,20 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
               Hits
               {hitsReportLoading && <span className="tab-spinner" />}
             </button>
+            <button
+              className={`category-tab ${activeCategory === 'dd' ? 'active' : ''}`}
+              onClick={() => setActiveCategory('dd')}
+            >
+              Diff Dep
+              {ddReportLoading && <span className="tab-spinner" />}
+            </button>
           </div>
 
           {/* Content area */}
           {currentLoading ? (
             <div className="qc-report-loading">
               <span className="spinner" />
-              <span>Generating {activeCategory === 'qc' ? 'QC' : 'hits'} report...</span>
+              <span>Generating {activeCategory === 'qc' ? 'QC' : activeCategory === 'hits' ? 'hits' : 'differential dependency'} report...</span>
             </div>
           ) : currentSections.length > 0 ? (
             <>
@@ -278,7 +405,11 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
             </>
           ) : (
             <div className="no-sections">
-              <p>No {activeCategory === 'qc' ? 'QC' : 'hits'} report sections available.</p>
+              {activeCategory === 'dd' ? (
+                <p>Select two conditions in the sidebar and click "Compare Conditions" to generate differential dependency analysis.</p>
+              ) : (
+                <p>No {activeCategory === 'qc' ? 'QC' : 'hits'} report sections available.</p>
+              )}
             </div>
           )}
         </div>
@@ -292,25 +423,51 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
             </div>
           )}
 
-          <h3>Download Reports</h3>
-          <div className="sidebar-actions">
-            <a
-              href={`/api/reports/${jobId}/pdf`}
-              download
-              className="sidebar-button"
-            >
-              Download QC Report (PDF)
-            </a>
-            {!hitsReportLoading && (
-              <a
-                href={`/api/reports/${jobId}/hits/pdf`}
-                download
-                className="sidebar-button"
-              >
-                Download Hits Report (PDF)
-              </a>
-            )}
-          </div>
+          {/* Differential Dependency section - show when 2+ conditions and reports ready */}
+          {availableConditions.length >= 2 && !qcReportLoading && !hitsReportLoading && (
+            <>
+              <h3>Differential Dependency</h3>
+              <div className="dd-compare-section">
+                <div className="dd-dropdowns">
+                  <select
+                    value={selectedCondition1}
+                    onChange={(e) => setSelectedCondition1(e.target.value)}
+                    disabled={comparisonRunning}
+                  >
+                    <option value="">Select condition...</option>
+                    {availableConditions.map((cond) => (
+                      <option key={cond} value={cond}>{cond}</option>
+                    ))}
+                  </select>
+                  <span className="dd-vs">vs</span>
+                  <select
+                    value={selectedCondition2}
+                    onChange={(e) => setSelectedCondition2(e.target.value)}
+                    disabled={comparisonRunning}
+                  >
+                    <option value="">Select condition...</option>
+                    {availableConditions.map((cond) => (
+                      <option key={cond} value={cond}>{cond}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  className="sidebar-button dd-button"
+                  disabled={!canRunDd}
+                  onClick={handleRunDifferentialDependency}
+                >
+                  {comparisonRunning ? (
+                    <>
+                      <span className="spinner" />
+                      Running...
+                    </>
+                  ) : (
+                    'Compare Conditions'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
 
           <h3>Download Outputs</h3>
 
@@ -336,11 +493,11 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           </div>
 
           <div className="files-list">
-            {/* Tier 1: Primary outputs */}
-            {files.filter(isTier1File).length > 0 && (
+            {/* Reports (PDFs) */}
+            {files.filter(isReportFile).length > 0 && (
               <>
-                <div className="files-tier-header">Primary Outputs</div>
-                {files.filter(isTier1File).map((file) => (
+                <div className="files-tier-header">Reports</div>
+                {files.filter(isReportFile).map((file) => (
                   <label key={fileKey(file)} className="file-item">
                     <input
                       type="checkbox"
@@ -353,11 +510,28 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
                 ))}
               </>
             )}
-            {/* Tier 2: Other outputs */}
-            {files.filter((f) => !isTier1File(f)).length > 0 && (
+            {/* Primary Outputs */}
+            {files.filter((f) => !isReportFile(f) && isPrimaryOutput(f)).length > 0 && (
+              <>
+                <div className="files-tier-header">Primary Outputs</div>
+                {files.filter((f) => !isReportFile(f) && isPrimaryOutput(f)).map((file) => (
+                  <label key={fileKey(file)} className="file-item">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(fileKey(file))}
+                      onChange={() => toggleSelect(file)}
+                    />
+                    <span className="file-name">{file.name}</span>
+                    <span className="file-size">{formatSize(file.size)}</span>
+                  </label>
+                ))}
+              </>
+            )}
+            {/* Other Outputs */}
+            {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f)).length > 0 && (
               <>
                 <div className="files-tier-header">Other Outputs</div>
-                {files.filter((f) => !isTier1File(f)).map((file) => (
+                {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f)).map((file) => (
                   <label key={fileKey(file)} className="file-item">
                     <input
                       type="checkbox"

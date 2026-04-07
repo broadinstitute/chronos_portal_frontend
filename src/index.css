@@ -925,6 +925,52 @@ body {
   cursor: not-allowed;
 }
 
+/* Differential Dependency compare section */
+.dd-compare-section {
+  padding: 0 1rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dd-dropdowns {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dd-dropdowns select {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #dde;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: white;
+}
+
+.dd-dropdowns select:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.dd-vs {
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.dd-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.dd-button .spinner {
+  width: 14px;
+  height: 14px;
+}
+
 .select-all {
   display: flex;
   align-items: center;
