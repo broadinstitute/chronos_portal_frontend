@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { HelpTooltip } from './HelpTooltip'
 
-export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
+const PRETRAINED_HELP = "Chronos will use parameters from a model trained on all DepMap data, and only learn the specific parameters for your data. Highly recommended if you want to compare your data to DepMap."
+
+export function LibrarySelect({ onFileSelect, onLibrarySelect, onPretrainedChange, helpText }) {
   const [libraries, setLibraries] = useState([])
-  const [selection, setSelection] = useState('Custom')
+  const [selection, setSelection] = useState(null) // null until libraries load
+  const [usePretrained, setUsePretrained] = useState(true)
   const [file, setFile] = useState(null)
   const [format, setFormat] = useState('csv')
   const [isDragOver, setIsDragOver] = useState(false)
@@ -19,9 +22,18 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
         if (response.ok) {
           const data = await response.json()
           setLibraries(data.libraries)
+          // Default to TKOv3 if available, otherwise first library
+          if (data.libraries.includes('TKOv3')) {
+            setSelection('TKOv3')
+          } else if (data.libraries.length > 0) {
+            setSelection(data.libraries[0])
+          } else {
+            setSelection('Custom')
+          }
         }
       } catch (err) {
         console.error('Failed to fetch libraries:', err)
+        setSelection('Custom')
       }
     }
     fetchLibraries()
@@ -29,6 +41,8 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
 
   // Notify parent when selection changes
   useEffect(() => {
+    if (selection === null) return // Wait for initial load
+
     if (isCustom) {
       // Clear library selection, use custom file if available
       onLibrarySelect?.(null)
@@ -38,11 +52,17 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
         onFileSelect?.(null)
       }
     } else {
-      // Using a built-in library
+      // Using a built-in library - auto-check pretrained
       onFileSelect?.(null)
       onLibrarySelect?.(selection)
+      setUsePretrained(true)
     }
   }, [selection])
+
+  // Notify parent when pretrained changes
+  useEffect(() => {
+    onPretrainedChange?.(usePretrained)
+  }, [usePretrained])
 
   const handleFile = (selectedFile) => {
     if (!selectedFile || !isCustom) return
@@ -86,7 +106,9 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
     ? file.name
     : isCustom
     ? 'Click or drag to upload'
-    : `Using ${selection} library`
+    : selection
+    ? `Using ${selection} library`
+    : 'Loading libraries...'
 
   const className = `file-display${file && isCustom ? ' has-file' : ''}${isDragOver ? ' dragover' : ''}${!isCustom ? ' disabled' : ''}`
 
@@ -100,7 +122,7 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
         <div className="file-input-wrapper">
           <select
             className="format-select"
-            value={selection}
+            value={selection || ''}
             onChange={(e) => setSelection(e.target.value)}
             style={{ minWidth: '120px' }}
           >
@@ -136,6 +158,18 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, helpText }) {
             onChange={handleChange}
           />
         </div>
+      </div>
+      <div className="section-row" style={{ marginTop: '8px' }}>
+        <span className="section-label"></span>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={usePretrained}
+            onChange={(e) => setUsePretrained(e.target.checked)}
+          />
+          Use pretrained parameters
+          <HelpTooltip text={PRETRAINED_HELP} />
+        </label>
       </div>
     </div>
   )

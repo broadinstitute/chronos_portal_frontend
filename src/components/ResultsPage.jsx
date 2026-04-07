@@ -10,7 +10,7 @@ export function ResultsPage({ jobId, onBack }) {
   const [error, setError] = useState(null)
   const [chronosError, setChronosError] = useState(null)
   const [isRunningChronos, setIsRunningChronos] = useState(false)
-  const [logs, setLogs] = useState([])
+  const [log, setLog] = useState('')
   const [showChronosResults, setShowChronosResults] = useState(false)
   const [chronosCompleted, setChronosCompleted] = useState(false)
   const [activeTab, setActiveTab] = useState(null)
@@ -44,31 +44,24 @@ export function ResultsPage({ jobId, onBack }) {
   useEffect(() => {
     if (!lastMessage) return
 
-    console.log('[WS] Received message:', lastMessage)
-
     if (lastMessage.type === 'log' && lastMessage.job_id === jobId) {
-      console.log('[WS] Log message:', lastMessage.message)
-      setLogs((prev) => {
-        console.log('[WS] logs length before:', prev.length, 'adding:', lastMessage.message)
-        return [...prev, lastMessage.message]
-      })
+      console.log('[WS] Log update received')
+      setLog(lastMessage.log)
     } else if (lastMessage.type === 'status' && lastMessage.job_id === jobId) {
-      console.log('[WS] Status message:', lastMessage.status)
       if (lastMessage.status === 'chronos_complete') {
-        console.log('[WS] Chronos complete! Setting state...')
         setIsRunningChronos(false)
         setChronosCompleted(true)
+        setShowChronosResults(true)
       }
     } else if (lastMessage.type === 'error' && lastMessage.job_id === jobId) {
-      console.log('[WS] Error received:', lastMessage.error)
-      setLogs((prev) => [...prev, `ERROR: ${lastMessage.error}`])
+      setLog((prev) => prev + `\nERROR: ${lastMessage.error}`)
       setChronosError(lastMessage.error)
     }
   }, [lastMessage, jobId])
 
   const handleRunChronos = async () => {
     setIsRunningChronos(true)
-    setLogs([])
+    setLog('')
 
     try {
       const response = await fetch('/api/run-chronos', {
@@ -82,7 +75,7 @@ export function ResultsPage({ jobId, onBack }) {
         throw new Error(result.detail || 'Failed to start Chronos')
       }
     } catch (err) {
-      setLogs((prev) => [...prev, `ERROR: ${err.message}`])
+      setLog((prev) => prev + `\nERROR: ${err.message}`)
       setIsRunningChronos(false)
     }
   }
@@ -92,6 +85,7 @@ export function ResultsPage({ jobId, onBack }) {
       <ChronosResultsPage
         jobId={jobId}
         title={report?.title}
+        initialLog={log}
         onBack={() => setShowChronosResults(false)}
       />
     )
@@ -205,10 +199,10 @@ export function ResultsPage({ jobId, onBack }) {
             )}
           </div>
 
-          {(isRunningChronos || logs.length > 0) && (
+          {(isRunningChronos || log) && (
             <div className="sidebar-log-section">
-              <h4>Chronos Output</h4>
-              <LogDisplay logs={logs} />
+              <h4>Server Output</h4>
+              <LogDisplay log={log} />
             </div>
           )}
         </div>

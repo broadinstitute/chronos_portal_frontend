@@ -3,7 +3,7 @@ import { useWebSocket } from './hooks/useWebSocket'
 import { FileUpload } from './components/FileUpload'
 import { ControlsUpload } from './components/ControlsUpload'
 import { LibrarySelect } from './components/LibrarySelect'
-import { CompareInput } from './components/CompareInput'
+import { CompareInput, isCompareValid } from './components/CompareInput'
 import { StatusBar } from './components/StatusBar'
 import { ErrorModal } from './components/ErrorModal'
 import { ResultsPage } from './components/ResultsPage'
@@ -25,6 +25,7 @@ function App() {
   const [jobId, setJobId] = useState(null)
   const [pendingFiles, setPendingFiles] = useState({})
   const [selectedLibrary, setSelectedLibrary] = useState(null)
+  const [usePretrained, setUsePretrained] = useState(true)
   const [condition1, setCondition1] = useState('')
   const [condition2, setCondition2] = useState('')
   const [status, setStatus] = useState(null)
@@ -44,10 +45,10 @@ function App() {
       setStatus(lastMessage.status)
       setStatusMessage(lastMessage.message)
 
-      if (lastMessage.status === 'complete') {
+      if (lastMessage.status === 'complete' && lastMessage.job_id) {
         setIsRunning(false)
         setShowResults(true)
-        setViewingJobId(jobId)
+        setViewingJobId(lastMessage.job_id)  // Use job_id from message, not stale state
       }
     } else if (lastMessage.type === 'error') {
       setError(lastMessage.error)
@@ -55,7 +56,7 @@ function App() {
       setStatus('error')
       setStatusMessage('An error occurred')
     }
-  }, [lastMessage, jobId])
+  }, [lastMessage])
 
   const handleFileSelect = (fileType) => (fileInfo) => {
     setPendingFiles((prev) => ({ ...prev, [fileType]: fileInfo }))
@@ -67,10 +68,12 @@ function App() {
   }
 
   const hasGuideMap = pendingFiles.guide_map || selectedLibrary
+  const compareValid = isCompareValid(condition1, condition2)
   const canRunQC =
     pendingFiles.readcounts &&
     pendingFiles.condition_map &&
     hasGuideMap &&
+    compareValid &&
     !isRunning
 
   const handleRunQC = async () => {
@@ -154,6 +157,7 @@ function App() {
           title: jobName || 'Untitled Analysis',
           condition1: condition1 || null,
           condition2: condition2 || null,
+          use_pretrained: usePretrained,
         }),
       })
 
@@ -237,6 +241,7 @@ function App() {
         <LibrarySelect
           onFileSelect={handleFileSelect('guide_map')}
           onLibrarySelect={setSelectedLibrary}
+          onPretrainedChange={setUsePretrained}
           helpText={HELP_TEXT.guide_map}
         />
 
