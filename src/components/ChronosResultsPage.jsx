@@ -51,7 +51,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
   const [selectedCondition1, setSelectedCondition1] = useState('')
   const [selectedCondition2, setSelectedCondition2] = useState('')
 
-  const wsUrl = `ws://${window.location.hostname}:8000/ws`
+  const wsUrl = `ws://${window.location.host}/ws`
   const { lastMessage } = useWebSocket(wsUrl)
 
   // Fetch files immediately, try reports (may not be ready yet)

@@ -46,7 +46,7 @@ function App() {
   const [showResults, setShowResults] = useState(false)
   const [viewingJobId, setViewingJobId] = useState(null)
 
-  const wsUrl = `ws://${window.location.hostname}:8000/ws`
+  const wsUrl = `ws://${window.location.host}/ws`
   const { isConnected, lastMessage } = useWebSocket(wsUrl)
 
   useEffect(() => {

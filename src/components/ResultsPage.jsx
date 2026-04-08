@@ -15,7 +15,7 @@ export function ResultsPage({ jobId, onBack }) {
   const [chronosCompleted, setChronosCompleted] = useState(false)
   const [activeTab, setActiveTab] = useState(null)
 
-  const wsUrl = `ws://${window.location.hostname}:8000/ws`
+  const wsUrl = `ws://${window.location.host}/ws`
   const { lastMessage } = useWebSocket(wsUrl)
 
   useEffect(() => {
