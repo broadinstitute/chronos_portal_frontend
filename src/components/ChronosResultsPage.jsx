@@ -80,6 +80,19 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         console.error('Failed to fetch conditions:', err)
       }
 
+      // Fetch existing log (for resumed jobs)
+      try {
+        const logRes = await fetch(`/api/jobs/${jobId}/log`)
+        if (logRes.ok) {
+          const data = await logRes.json()
+          if (data.log) {
+            setLog(data.log)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch log:', err)
+      }
+
       // Try to fetch reports (may not be ready yet)
       fetchQcReport()
       fetchHitsReport()
@@ -98,13 +111,17 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         if (data.sections && data.sections.length > 0) {
           setQcSections(data.sections)
           setActiveQcTab(data.sections[0].id)
-          setQcReportLoading(false)
         }
+        setQcReportLoading(false)
       } else if (qcRes.status === 404 && retryCount < 10) {
         setTimeout(() => fetchQcReport(retryCount + 1), 5000)
+      } else {
+        // Non-retryable error or retries exhausted
+        setQcReportLoading(false)
       }
     } catch (err) {
       console.error('Failed to fetch QC report:', err)
+      setQcReportLoading(false)
     }
   }
 
@@ -117,13 +134,17 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         if (data.sections && data.sections.length > 0) {
           setHitsSections(data.sections)
           setActiveHitsTab(data.sections[0].id)
-          setHitsReportLoading(false)
         }
+        setHitsReportLoading(false)
       } else if (hitsRes.status === 404 && retryCount < 10) {
         setTimeout(() => fetchHitsReport(retryCount + 1), 5000)
+      } else {
+        // Non-retryable error or retries exhausted
+        setHitsReportLoading(false)
       }
     } catch (err) {
       console.error('Failed to fetch hits report:', err)
+      setHitsReportLoading(false)
     }
   }
 
