@@ -5,6 +5,7 @@ export function useWebSocket(url) {
   const [lastMessage, setLastMessage] = useState(null)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
+  const seenIds = useRef(new Set())  // Track seen message IDs for deduplication
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -27,6 +28,17 @@ export function useWebSocket(url) {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
+
+        // Dedupe and ack messages with IDs
+        if (data.msg_id) {
+          if (seenIds.current.has(data.msg_id)) {
+            return // Ignore duplicate
+          }
+          seenIds.current.add(data.msg_id)
+          // Send ack to stop server retries
+          ws.send(JSON.stringify({ type: 'ack', msg_id: data.msg_id }))
+        }
+
         setLastMessage(data)
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e)

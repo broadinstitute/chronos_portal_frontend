@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { HelpTooltip } from './HelpTooltip'
 
-export function ControlsUpload({ label, fileType, onFileSelect, optional = false, helpText }) {
-  const [file, setFile] = useState(null)
+export function ControlsUpload({ label, fileType, onFileSelect, optional = false, helpText, initialValue = null }) {
+  const [file, setFile] = useState(initialValue?.file || null)
   const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef(null)
 

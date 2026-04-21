@@ -3,12 +3,20 @@ import { HelpTooltip } from './HelpTooltip'
 
 const PRETRAINED_HELP = "Chronos will use parameters from a model trained on all DepMap data, and only learn the specific parameters for your data. Highly recommended if you want to compare your data to DepMap."
 
-export function LibrarySelect({ onFileSelect, onLibrarySelect, onPretrainedChange, helpText }) {
+export function LibrarySelect({
+  onFileSelect,
+  onLibrarySelect,
+  onPretrainedChange,
+  helpText,
+  initialSelection = null,
+  initialFile = null,
+  initialUsePretrained = true,
+}) {
   const [libraries, setLibraries] = useState([])
-  const [selection, setSelection] = useState(null) // null until libraries load
-  const [usePretrained, setUsePretrained] = useState(true)
-  const [file, setFile] = useState(null)
-  const [format, setFormat] = useState('csv')
+  const [selection, setSelection] = useState(initialSelection) // null until libraries load, or use initial
+  const [usePretrained, setUsePretrained] = useState(initialUsePretrained)
+  const [file, setFile] = useState(initialFile?.file || null)
+  const [format, setFormat] = useState(initialFile?.format || 'csv')
   const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef(null)
 
@@ -22,18 +30,23 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, onPretrainedChang
         if (response.ok) {
           const data = await response.json()
           setLibraries(data.libraries)
-          // Default to TKOv3 if available, otherwise first library
-          if (data.libraries.includes('TKOv3')) {
-            setSelection('TKOv3')
-          } else if (data.libraries.length > 0) {
-            setSelection(data.libraries[0])
-          } else {
-            setSelection('Custom')
+          // Only set default if no initial selection was provided
+          if (selection === null) {
+            // Default to TKOv3 if available, otherwise first library
+            if (data.libraries.includes('TKOv3')) {
+              setSelection('TKOv3')
+            } else if (data.libraries.length > 0) {
+              setSelection(data.libraries[0])
+            } else {
+              setSelection('Custom')
+            }
           }
         }
       } catch (err) {
         console.error('Failed to fetch libraries:', err)
-        setSelection('Custom')
+        if (selection === null) {
+          setSelection('Custom')
+        }
       }
     }
     fetchLibraries()
@@ -46,15 +59,17 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, onPretrainedChang
     if (isCustom) {
       // Clear library selection, use custom file if available
       onLibrarySelect?.(null)
+      setUsePretrained(false)
       if (file) {
         onFileSelect?.({ file, format, filename: file.name })
       } else {
         onFileSelect?.(null)
       }
     } else {
-      // Using a built-in library - auto-check pretrained
+      // Using a built-in library
       onFileSelect?.(null)
       onLibrarySelect?.(selection)
+      // Auto-check pretrained when selecting a built-in library
       setUsePretrained(true)
     }
   }, [selection])
@@ -161,11 +176,12 @@ export function LibrarySelect({ onFileSelect, onLibrarySelect, onPretrainedChang
       </div>
       <div className="section-row" style={{ marginTop: '8px' }}>
         <span className="section-label"></span>
-        <label className="checkbox-label">
+        <label className={`checkbox-label${isCustom ? ' disabled' : ''}`}>
           <input
             type="checkbox"
             checked={usePretrained}
             onChange={(e) => setUsePretrained(e.target.checked)}
+            disabled={isCustom}
           />
           Use pretrained parameters
           <HelpTooltip text={PRETRAINED_HELP} />

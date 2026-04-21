@@ -5,7 +5,7 @@ import { ControlsUpload } from './components/ControlsUpload'
 import { LibrarySelect } from './components/LibrarySelect'
 import { StatusBar } from './components/StatusBar'
 import { ErrorModal } from './components/ErrorModal'
-import { ResultsPage } from './components/ResultsPage'
+import { ChronosResultsPage } from './components/ChronosResultsPage'
 import { Sidebar } from './components/Sidebar'
 
 // Generate a job ID (same format as server)
@@ -63,12 +63,6 @@ function App() {
     if (lastMessage.type === 'status') {
       setStatus(lastMessage.status)
       setStatusMessage(lastMessage.message)
-
-      if (lastMessage.status === 'complete' && lastMessage.job_id) {
-        setIsRunning(false)
-        setShowResults(true)
-        setViewingJobId(lastMessage.job_id)
-      }
     } else if (lastMessage.type === 'error') {
       setError(lastMessage.error)
       setIsRunning(false)
@@ -82,17 +76,26 @@ function App() {
   }, [lastMessage, jobId, showResults])
 
   const handleFileSelect = (fileType) => (fileInfo) => {
+    if (fileInfo === null) {
+      // File was removed
+      setPendingFiles((prev) => {
+        const updated = { ...prev }
+        delete updated[fileType]
+        return updated
+      })
+      return
+    }
     setPendingFiles((prev) => ({ ...prev, [fileType]: fileInfo }))
   }
 
   const hasGuideMap = pendingFiles.guide_map || selectedLibrary
-  const canRunQC =
+  const canUpload =
     pendingFiles.readcounts &&
     pendingFiles.condition_map &&
     hasGuideMap &&
     !isRunning
 
-  const handleRunQC = async () => {
+  const handleUpload = async () => {
     // Generate job ID upfront before any API calls
     const newJobId = generateJobId(jobName || 'Untitled Analysis')
     setJobId(newJobId)
@@ -115,20 +118,56 @@ function App() {
 
         setStatusMessage(`Uploading ${fileType.replace('_', ' ')}...`)
 
-        const formData = new FormData()
-        formData.append('file', fileInfo.file)
-        formData.append('file_format', fileInfo.format)
-        formData.append('job_name', jobName || 'Untitled Analysis')
-        formData.append('job_id', newJobId)
+        // Handle multi-file uploads (for readcounts with sequence formats)
+        if (fileInfo.files && Array.isArray(fileInfo.files)) {
+          // Upload each file with an index
+          for (let i = 0; i < fileInfo.files.length; i++) {
+            const file = fileInfo.files[i]
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('file_format', fileInfo.format)
+            formData.append('job_name', jobName || 'Untitled Analysis')
+            formData.append('job_id', newJobId)
+            formData.append('file_index', i.toString())
+            formData.append('total_files', fileInfo.files.length.toString())
 
-        const response = await fetch(`/api/upload/${fileType}`, {
-          method: 'POST',
-          body: formData,
-        })
+            const response = await fetch(`/api/upload/${fileType}`, {
+              method: 'POST',
+              body: formData,
+            })
 
-        const result = await response.json()
-        if (!response.ok) {
-          throw new Error(`Failed to upload ${fileType}: ${result.detail}`)
+            let result
+            try {
+              result = await response.json()
+            } catch {
+              throw new Error(`Failed to upload ${fileType} (file ${i + 1}): Server returned invalid response. The file may have been modified on disk - please re-select it.`)
+            }
+            if (!response.ok) {
+              throw new Error(`Failed to upload ${fileType} (file ${i + 1}): ${result.detail}`)
+            }
+          }
+        } else {
+          // Single file upload (existing behavior)
+          const formData = new FormData()
+          formData.append('file', fileInfo.file)
+          formData.append('file_format', fileInfo.format)
+          formData.append('job_name', jobName || 'Untitled Analysis')
+          formData.append('job_id', newJobId)
+
+          const response = await fetch(`/api/upload/${fileType}`, {
+            method: 'POST',
+            body: formData,
+          })
+
+          let result
+          try {
+            result = await response.json()
+          } catch {
+            throw new Error(`Failed to upload ${fileType}: Server returned invalid response. The file may have been modified on disk - please re-select it.`)
+          }
+          if (!response.ok) {
+            throw new Error(`Failed to upload ${fileType}: ${result.detail}`)
+          }
         }
       }
 
@@ -144,28 +183,23 @@ function App() {
           body: formData,
         })
 
-        const libResult = await libResponse.json()
+        let libResult
+        try {
+          libResult = await libResponse.json()
+        } catch {
+          throw new Error(`Failed to set library: Server returned invalid response`)
+        }
         if (!libResponse.ok) {
           throw new Error(`Failed to set library: ${libResult.detail}`)
         }
       }
 
-      // Now start QC
-      setStatusMessage('Starting QC analysis...')
-      const qcResponse = await fetch('/api/run-qc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_id: newJobId,
-          title: jobName || 'Untitled Analysis',
-          use_pretrained: usePretrained,
-        }),
-      })
-
-      const qcResult = await qcResponse.json()
-      if (!qcResponse.ok) {
-        throw new Error(qcResult.detail || 'Failed to start QC')
-      }
+      // Upload complete - navigate to results page
+      setIsRunning(false)
+      setStatus(null)
+      setStatusMessage('')
+      setShowResults(true)
+      setViewingJobId(newJobId)
     } catch (err) {
       setError(err.message)
       setIsRunning(false)
@@ -187,6 +221,9 @@ function App() {
     setShowResults(false)
     setViewingJobId(null)
     setJobId(null)
+    setError(null)
+    setStatus(null)
+    setStatusMessage('')
   }
 
   const handleSelectJob = (selectedJobId) => {
@@ -196,7 +233,7 @@ function App() {
   }
 
   if (showResults && viewingJobId) {
-    return <ResultsPage jobId={viewingJobId} onBack={handleBackFromResults} />
+    return <ChronosResultsPage jobId={viewingJobId} onBack={handleBackFromResults} />
   }
 
   return (
@@ -231,8 +268,10 @@ function App() {
           label="CRISPR Reads"
           fileType="readcounts"
           onFileSelect={handleFileSelect('readcounts')}
-          allowHdf5
+          allowSequenceFormats
+          allowMultiple
           helpText={HELP_TEXT.readcounts}
+          initialValue={pendingFiles.readcounts}
         />
 
         <FileUpload
@@ -240,6 +279,7 @@ function App() {
           fileType="condition_map"
           onFileSelect={handleFileSelect('condition_map')}
           helpText={HELP_TEXT.condition_map}
+          initialValue={pendingFiles.condition_map}
         />
 
         <LibrarySelect
@@ -247,6 +287,9 @@ function App() {
           onLibrarySelect={setSelectedLibrary}
           onPretrainedChange={setUsePretrained}
           helpText={HELP_TEXT.guide_map}
+          initialSelection={selectedLibrary}
+          initialFile={pendingFiles.guide_map}
+          initialUsePretrained={usePretrained}
         />
 
         <FileUpload
@@ -256,6 +299,7 @@ function App() {
           optional
           allowHdf5
           helpText={HELP_TEXT.copy_number}
+          initialValue={pendingFiles.copy_number}
         />
 
         <div className="controls-section">
@@ -265,6 +309,7 @@ function App() {
             onFileSelect={handleFileSelect('negative_controls')}
             optional
             helpText={HELP_TEXT.negative_controls}
+            initialValue={pendingFiles.negative_controls}
           />
           <ControlsUpload
             label="Positive controls"
@@ -272,11 +317,12 @@ function App() {
             onFileSelect={handleFileSelect('positive_controls')}
             optional
             helpText={HELP_TEXT.positive_controls}
+            initialValue={pendingFiles.positive_controls}
           />
         </div>
 
-        <button className="run-button" disabled={!canRunQC} onClick={handleRunQC}>
-          Run Initial QC
+        <button className="run-button" disabled={!canUpload} onClick={handleUpload}>
+          Upload
         </button>
 
         <StatusBar status={status} message={statusMessage} />

@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { LogDisplay } from './LogDisplay'
+import { ActionSection } from './ActionSection'
+import { ReadcountOptions } from './ReadcountOptions'
+import { ErrorModal } from './ErrorModal'
 
 // Create unique key for file (name + source)
 const fileKey = (file) => `${file.source}:${file.name}`
 
 // File categorization
 const isReportFile = (file) => file.source === 'Reports'
+const isPoolQFile = (file) => file.source === 'PoolQ'
 
 const PRIMARY_OUTPUT_FILES = [
   'gene_effect.csv',
@@ -23,7 +27,7 @@ const isPrimaryOutput = (file) => {
   return false
 }
 
-export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
+export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
   const [files, setFiles] = useState([])
   const [log, setLog] = useState(initialLog)
   const [selected, setSelected] = useState(new Set())
@@ -31,7 +35,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
   const [downloading, setDownloading] = useState(false)
 
   // Two-tier tab state
-  const [activeCategory, setActiveCategory] = useState('qc')
+  const [activeCategory, setActiveCategory] = useState('initial-qc')
   const [qcSections, setQcSections] = useState([])
   const [hitsSections, setHitsSections] = useState([])
   const [activeQcTab, setActiveQcTab] = useState(null)
@@ -51,12 +55,85 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
   const [selectedCondition1, setSelectedCondition1] = useState('')
   const [selectedCondition2, setSelectedCondition2] = useState('')
 
+  // Pipeline state for actions
+  const [jobStatus, setJobStatus] = useState(null)
+  const [expandedAction, setExpandedAction] = useState(null)
+
+  // Initial QC state (from original ResultsPage)
+  const [initialQcSections, setInitialQcSections] = useState([])
+  const [activeInitialQcTab, setActiveInitialQcTab] = useState(null)
+  const [initialQcLoading, setInitialQcLoading] = useState(true)
+
+  // Action running states
+  const [preprocessingRunning, setPreprocessingRunning] = useState(false)
+  const [qcRunning, setQcRunning] = useState(false)
+  const [chronosRunning, setChronosRunning] = useState(false)
+
+  // Error state
+  const [error, setError] = useState(null)
+
+  // Readcount options for preprocessing
+  const [readcountOptions, setReadcountOptions] = useState({})
+  const [readcountFilenames, setReadcountFilenames] = useState([])
+
   const wsUrl = `ws://${window.location.host}/ws`
   const { lastMessage } = useWebSocket(wsUrl)
+
+  // Fetch job status (returns data for immediate use)
+  const fetchJobStatus = async () => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/status`)
+      if (res.ok) {
+        const data = await res.json()
+        setJobStatus(data)
+        setAvailableConditions(data.available_conditions || [])
+        if (data.readcount_options) {
+          setReadcountOptions(data.readcount_options)
+        }
+        if (data.readcount_filenames) {
+          setReadcountFilenames(data.readcount_filenames)
+        }
+        // Sync running states with server's completed flags
+        // (fallback if WebSocket message was missed)
+        if (data.preprocessing_complete) setPreprocessingRunning(false)
+        if (data.qc_completed) setQcRunning(false)
+        if (data.chronos_completed) setChronosRunning(false)
+        return data
+      }
+    } catch (err) {
+      console.error('Failed to fetch job status:', err)
+    }
+    return null
+  }
+
+  // Fetch Initial QC report
+  const fetchInitialQcReport = async (retryCount = 0) => {
+    try {
+      const res = await fetch(`/api/reports/${jobId}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.sections?.length > 0) {
+          setInitialQcSections(data.sections)
+          setActiveInitialQcTab(data.sections[0].id)
+        }
+        setInitialQcLoading(false)
+      } else if (res.status === 404 && retryCount < 10) {
+        setTimeout(() => fetchInitialQcReport(retryCount + 1), 5000)
+      } else {
+        setInitialQcLoading(false)
+      }
+    } catch (err) {
+      console.error('Failed to fetch Initial QC report:', err)
+      setInitialQcLoading(false)
+    }
+  }
 
   // Fetch files immediately, try reports (may not be ready yet)
   useEffect(() => {
     async function fetchData() {
+      // Fetch job status first (returns data for immediate use)
+      const status = await fetchJobStatus()
+
       try {
         const filesRes = await fetch(`/api/outputs/${jobId}`)
         if (filesRes.ok) {
@@ -67,17 +144,6 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         console.error('Failed to fetch files:', err)
       } finally {
         setLoading(false)
-      }
-
-      // Fetch available conditions
-      try {
-        const condRes = await fetch(`/api/jobs/${jobId}/conditions`)
-        if (condRes.ok) {
-          const data = await condRes.json()
-          setAvailableConditions(data.conditions || [])
-        }
-      } catch (err) {
-        console.error('Failed to fetch conditions:', err)
       }
 
       // Fetch existing log (for resumed jobs)
@@ -93,10 +159,22 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         console.error('Failed to fetch log:', err)
       }
 
-      // Try to fetch reports (may not be ready yet)
-      fetchQcReport()
-      fetchHitsReport()
-      fetchDdReport()
+      // Fetch Initial QC report (always try - runs after upload)
+      if (status?.qc_completed) {
+        fetchInitialQcReport()
+      } else {
+        setInitialQcLoading(false)
+      }
+
+      // Only fetch chronos-qc and hits reports if chronos has completed
+      if (status?.chronos_completed) {
+        fetchQcReport()
+        fetchHitsReport()
+        fetchDdReport()
+      } else {
+        setQcReportLoading(false)
+        setHitsReportLoading(false)
+      }
     }
 
     fetchData()
@@ -176,9 +254,47 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
     if (lastMessage.type === 'log' && lastMessage.job_id === jobId) {
       console.log('[WS] Log update received')
       setLog(lastMessage.log)
-    } else if (lastMessage.type === 'status' && lastMessage.job_id === jobId) {
+    }
+
+    // Handle errors
+    if (lastMessage.type === 'error' && lastMessage.job_id === jobId) {
+      setError(lastMessage.error)
+      // Reset all running states
+      setPreprocessingRunning(false)
+      setQcRunning(false)
+      setChronosRunning(false)
+      setComparisonRunning(false)
+      setDdReportLoading(false)
+    }
+
+    if (lastMessage.type === 'status' && lastMessage.job_id === jobId) {
+      // Show status messages in the server output
+      if (lastMessage.message) {
+        setLog((prev) => prev ? `${prev}\n${lastMessage.message}` : lastMessage.message)
+      }
       if (lastMessage.status === 'running' && lastMessage.message?.includes('condition comparison')) {
         setComparisonRunning(true)
+      } else if (lastMessage.status === 'preprocessing_complete') {
+        setPreprocessingRunning(false)
+        fetchJobStatus()
+      } else if (lastMessage.status === 'complete') {
+        // Initial QC completed
+        setQcRunning(false)
+        fetchJobStatus()
+        fetchInitialQcReport()
+        // Refresh file list
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files))
+          .catch((err) => console.error('Failed to refresh files:', err))
+      } else if (lastMessage.status === 'chronos_complete') {
+        setChronosRunning(false)
+        fetchJobStatus()
+        // Refresh file list
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files))
+          .catch((err) => console.error('Failed to refresh files:', err))
       } else if (lastMessage.status === 'comparison_complete') {
         setComparisonRunning(false)
         fetch(`/api/outputs/${jobId}`)
@@ -265,7 +381,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
           a.href = url
-          a.download = `${title || jobId}_outputs.zip`
+          a.download = `${jobStatus?.title || jobId}_outputs.zip`
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
@@ -285,6 +401,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
     }
 
     setComparisonRunning(true)
+    setExpandedAction(null)
     setDdReportLoading(true)
 
     try {
@@ -311,6 +428,114 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
     }
   }
 
+  // Action handlers
+  const handleRunPreprocessing = async () => {
+    setPreprocessingRunning(true)
+    setExpandedAction(null)
+    setLog('')
+    try {
+      // First save readcount options
+      await fetch('/api/readcount-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, ...readcountOptions }),
+      })
+      // Then run preprocessing
+      const res = await fetch('/api/run-preprocessing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      })
+      if (!res.ok) {
+        const result = await res.json()
+        console.error('Failed to start preprocessing:', result.detail)
+        setPreprocessingRunning(false)
+      }
+    } catch (err) {
+      console.error('Failed to start preprocessing:', err)
+      setPreprocessingRunning(false)
+    }
+  }
+
+  const handleRunQc = async () => {
+    setQcRunning(true)
+    setExpandedAction(null)
+    setLog('')
+    try {
+      const res = await fetch('/api/run-qc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      })
+      if (!res.ok) {
+        const result = await res.json()
+        console.error('Failed to start QC:', result.detail)
+        setQcRunning(false)
+      }
+    } catch (err) {
+      console.error('Failed to start QC:', err)
+      setQcRunning(false)
+    }
+  }
+
+  const handleRunChronos = async () => {
+    setChronosRunning(true)
+    setExpandedAction(null)
+    setLog('')
+    try {
+      const res = await fetch('/api/run-chronos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId }),
+      })
+      if (!res.ok) {
+        const result = await res.json()
+        console.error('Failed to start Chronos:', result.detail)
+        setChronosRunning(false)
+      }
+    } catch (err) {
+      console.error('Failed to start Chronos:', err)
+      setChronosRunning(false)
+    }
+  }
+
+  // Action status helpers - check prerequisites only, not completion status
+  // (completion is allowed for re-running)
+  const canRunInitialQc = jobStatus &&
+    (!jobStatus.is_sequence_format || jobStatus.preprocessing_complete)
+
+  const canRunChronos = jobStatus?.qc_completed
+
+  const getPreprocessingStatus = () => {
+    if (preprocessingRunning) return 'running'
+    if (jobStatus?.preprocessing_complete) return 'complete'
+    return 'ready'
+  }
+
+  const getInitialQcStatus = () => {
+    if (qcRunning) return 'running'
+    if (jobStatus?.qc_completed) return 'complete'
+    if (!canRunInitialQc) return 'pending'
+    return 'ready'
+  }
+
+  const getChronosStatus = () => {
+    if (chronosRunning) return 'running'
+    if (jobStatus?.chronos_completed) return 'complete'
+    if (!jobStatus?.qc_completed) return 'pending'
+    return 'ready'
+  }
+
+  const getDdStatus = () => {
+    if (comparisonRunning) return 'running'
+    if (ddSections.length > 0) return 'complete'
+    if (!jobStatus?.chronos_completed) return 'pending'
+    return 'ready'
+  }
+
+  // Check if any action is running (prevents starting multiple actions)
+  const anyActionRunning = preprocessingRunning || qcRunning || chronosRunning || comparisonRunning
+
   // Check if DD can be run
   const canRunDd =
     availableConditions.length >= 2 &&
@@ -319,22 +544,26 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
     selectedCondition1 &&
     selectedCondition2 &&
     selectedCondition1 !== selectedCondition2 &&
-    !comparisonRunning
+    !anyActionRunning
 
   // Get active sections and tab based on category
   const currentSections =
+    activeCategory === 'initial-qc' ? initialQcSections :
     activeCategory === 'qc' ? qcSections :
     activeCategory === 'hits' ? hitsSections :
     ddSections
   const currentActiveTab =
+    activeCategory === 'initial-qc' ? activeInitialQcTab :
     activeCategory === 'qc' ? activeQcTab :
     activeCategory === 'hits' ? activeHitsTab :
     activeDdTab
   const setCurrentActiveTab =
+    activeCategory === 'initial-qc' ? setActiveInitialQcTab :
     activeCategory === 'qc' ? setActiveQcTab :
     activeCategory === 'hits' ? setActiveHitsTab :
     setActiveDdTab
   const currentLoading =
+    activeCategory === 'initial-qc' ? initialQcLoading :
     activeCategory === 'qc' ? qcReportLoading :
     activeCategory === 'hits' ? hitsReportLoading :
     ddReportLoading
@@ -358,7 +587,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
         <button className="back-button" onClick={onBack}>
           Back
         </button>
-        <h1>{title} - Chronos Results</h1>
+        <h1>{jobStatus?.title || 'Untitled'} - Chronos CRISPR Analysis</h1>
       </header>
 
       <div className="chronos-layout">
@@ -367,10 +596,17 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           {/* Top-level category tabs */}
           <div className="category-tabs">
             <button
+              className={`category-tab ${activeCategory === 'initial-qc' ? 'active' : ''}`}
+              onClick={() => setActiveCategory('initial-qc')}
+            >
+              Initial QC
+              {initialQcLoading && <span className="tab-spinner" />}
+            </button>
+            <button
               className={`category-tab ${activeCategory === 'qc' ? 'active' : ''}`}
               onClick={() => setActiveCategory('qc')}
             >
-              QC
+              Chronos QC
               {qcReportLoading && <span className="tab-spinner" />}
             </button>
             <button
@@ -384,7 +620,7 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
               className={`category-tab ${activeCategory === 'dd' ? 'active' : ''}`}
               onClick={() => setActiveCategory('dd')}
             >
-              Diff Dep
+              Differential Dependency
               {ddReportLoading && <span className="tab-spinner" />}
             </button>
           </div>
@@ -393,7 +629,12 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           {currentLoading ? (
             <div className="qc-report-loading">
               <span className="spinner" />
-              <span>Generating {activeCategory === 'qc' ? 'QC' : activeCategory === 'hits' ? 'hits' : 'differential dependency'} report...</span>
+              <span>Generating {
+                activeCategory === 'initial-qc' ? 'initial QC' :
+                activeCategory === 'qc' ? 'Chronos QC' :
+                activeCategory === 'hits' ? 'hits' :
+                'differential dependency'
+              } report...</span>
             </div>
           ) : currentSections.length > 0 ? (
             <>
@@ -417,7 +658,11 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
                     <p className="section-text">{activeSection.text}</p>
                   )}
                   <div className="section-images">
-                    {activeSection.image_urls.map((url, idx) => (
+                    {/* Handle both image_url (Initial QC) and image_urls (other reports) */}
+                    {activeSection.image_url && (
+                      <img src={activeSection.image_url} alt={activeSection.title} />
+                    )}
+                    {activeSection.image_urls?.map((url, idx) => (
                       <img key={idx} src={url} alt={`${activeSection.title} ${idx + 1}`} />
                     ))}
                   </div>
@@ -428,27 +673,93 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
             <div className="no-sections">
               {activeCategory === 'dd' ? (
                 <p>Select two conditions in the sidebar and click "Compare Conditions" to generate differential dependency analysis.</p>
+              ) : activeCategory === 'initial-qc' ? (
+                <p>Run Initial Data QC from the Actions panel to generate the report.</p>
               ) : (
-                <p>No {activeCategory === 'qc' ? 'QC' : 'hits'} report sections available.</p>
+                <p>No {activeCategory === 'qc' ? 'Chronos QC' : 'hits'} report sections available. Run Chronos first.</p>
               )}
             </div>
           )}
         </div>
 
-        {/* Sidebar with download list */}
+        {/* Sidebar with actions and downloads */}
         <div className="chronos-sidebar">
-          {log && (
-            <div className="sidebar-log-section">
-              <h4>Server Output</h4>
-              <LogDisplay log={log} />
-            </div>
-          )}
+          {/* Actions Section */}
+          <h3>Actions</h3>
+          <div className="sidebar-actions-list">
+            {/* Generate Readcount Matrix - only for sequence formats */}
+            {jobStatus?.is_sequence_format && (
+              <ActionSection
+                title="Generate Readcount Matrix"
+                expanded={expandedAction === 'preprocessing'}
+                onToggle={() => setExpandedAction(expandedAction === 'preprocessing' ? null : 'preprocessing')}
+                status={getPreprocessingStatus()}
+              >
+                <ReadcountOptions
+                  filenames={readcountFilenames}
+                  hasCompressed={false}
+                  onChange={setReadcountOptions}
+                  compact={true}
+                />
+                <button
+                  className="action-run-button"
+                  disabled={anyActionRunning}
+                  onClick={handleRunPreprocessing}
+                >
+                  {preprocessingRunning ? 'Processing...' : 'Run Preprocessing'}
+                </button>
+              </ActionSection>
+            )}
 
-          {/* Differential Dependency section - show when 2+ conditions and reports ready */}
-          {availableConditions.length >= 2 && !qcReportLoading && !hitsReportLoading && (
-            <>
-              <h3>Differential Dependency</h3>
-              <div className="dd-compare-section">
+            {/* Initial Data QC */}
+            <ActionSection
+              title="Initial Data QC"
+              expanded={expandedAction === 'initial-qc'}
+              onToggle={() => setExpandedAction(expandedAction === 'initial-qc' ? null : 'initial-qc')}
+              status={getInitialQcStatus()}
+              disabled={!canRunInitialQc && !jobStatus?.qc_completed}
+            >
+              <p className="action-description">
+                Generate quality control report for uploaded data.
+              </p>
+              <button
+                className="action-run-button"
+                disabled={anyActionRunning || !canRunInitialQc}
+                onClick={handleRunQc}
+              >
+                {qcRunning ? 'Running QC...' : 'Run Initial QC'}
+              </button>
+            </ActionSection>
+
+            {/* Run Chronos */}
+            <ActionSection
+              title="Run Chronos"
+              expanded={expandedAction === 'chronos'}
+              onToggle={() => setExpandedAction(expandedAction === 'chronos' ? null : 'chronos')}
+              status={getChronosStatus()}
+              disabled={!canRunChronos}
+            >
+              <p className="action-description">
+                Train Chronos model, generate QC report, and run hit calling.
+              </p>
+              <button
+                className="action-run-button"
+                disabled={anyActionRunning || !canRunChronos}
+                onClick={handleRunChronos}
+              >
+                {chronosRunning ? 'Running...' : 'Run Chronos'}
+              </button>
+            </ActionSection>
+
+            {/* Differential Dependency */}
+            {jobStatus?.chronos_completed && availableConditions.length >= 2 && (
+              <ActionSection
+                title="Differential Dependency"
+                expanded={expandedAction === 'dd'}
+                onToggle={() => setExpandedAction(expandedAction === 'dd' ? null : 'dd')}
+                status={getDdStatus()}
+                disabled={false}
+              >
                 <div className="dd-dropdowns">
                   <select
                     value={selectedCondition1}
@@ -473,31 +784,23 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
                   </select>
                 </div>
                 <button
-                  className="sidebar-button dd-button"
+                  className="action-run-button"
                   disabled={!canRunDd}
                   onClick={handleRunDifferentialDependency}
                 >
-                  {comparisonRunning ? (
-                    <>
-                      <span className="spinner" />
-                      Running...
-                    </>
-                  ) : (
-                    'Compare Conditions'
-                  )}
+                  {comparisonRunning ? 'Running...' : 'Compare Conditions'}
                 </button>
-              </div>
-            </>
-          )}
+              </ActionSection>
+            )}
+          </div>
+
+          {/* Server Output */}
+          <div className="sidebar-log-section">
+            <h4>Server Output</h4>
+            <LogDisplay log={log || ''} />
+          </div>
 
           <h3>Download Outputs</h3>
-
-          {comparisonRunning && (
-            <div className="comparison-status">
-              <span className="spinner" />
-              <span>Running condition comparison...</span>
-            </div>
-          )}
 
           <div className="files-header">
             <label className="select-all">
@@ -549,10 +852,27 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
               </>
             )}
             {/* Other Outputs */}
-            {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f)).length > 0 && (
+            {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f) && !isPoolQFile(f)).length > 0 && (
               <>
                 <div className="files-tier-header">Other Outputs</div>
-                {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f)).map((file) => (
+                {files.filter((f) => !isReportFile(f) && !isPrimaryOutput(f) && !isPoolQFile(f)).map((file) => (
+                  <label key={fileKey(file)} className="file-item">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(fileKey(file))}
+                      onChange={() => toggleSelect(file)}
+                    />
+                    <span className="file-name">{file.name}</span>
+                    <span className="file-size">{formatSize(file.size)}</span>
+                  </label>
+                ))}
+              </>
+            )}
+            {/* PoolQ Outputs - only for sequence format jobs */}
+            {jobStatus?.is_sequence_format && files.filter(isPoolQFile).length > 0 && (
+              <>
+                <div className="files-tier-header">PoolQ Outputs</div>
+                {files.filter(isPoolQFile).map((file) => (
                   <label key={fileKey(file)} className="file-item">
                     <input
                       type="checkbox"
@@ -576,6 +896,8 @@ export function ChronosResultsPage({ jobId, title, initialLog = '', onBack }) {
           </button>
         </div>
       </div>
+
+      <ErrorModal error={error} onClose={() => setError(null)} />
     </div>
   )
 }

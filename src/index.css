@@ -82,7 +82,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 220px;
+  width: 300px;
   background: #fff;
   border-right: 1px solid #e0e5ea;
   padding: 1.5rem 1rem;
@@ -122,13 +122,157 @@ body {
   color: #1a2b3c;
   cursor: pointer;
   transition: background 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.job-list-item:hover {
+  background: #f0f5f7;
+}
+
+.job-title {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.job-list-item:hover {
-  background: #f0f5f7;
+.job-date {
+  font-size: 0.75rem;
+  color: #8a9bac;
+}
+
+.job-list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e0e5ea;
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #5a6b7c;
+  cursor: pointer;
+}
+
+.select-all-label input {
+  cursor: pointer;
+}
+
+.delete-jobs-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.delete-jobs-button:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.delete-jobs-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.job-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.job-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.job-list-row .job-list-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 320px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.confirm-dialog p {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #1a2b3c;
+}
+
+.confirm-warning {
+  color: #8a9bac !important;
+  font-size: 0.85rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.confirm-cancel,
+.confirm-delete {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.confirm-cancel {
+  background: #e0e5ea;
+  color: #1a2b3c;
+}
+
+.confirm-cancel:hover:not(:disabled) {
+  background: #d0d5da;
+}
+
+.confirm-delete {
+  background: #dc3545;
+  color: white;
+}
+
+.confirm-delete:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.confirm-cancel:disabled,
+.confirm-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .header {
@@ -255,6 +399,16 @@ body {
 
 .checkbox-label input {
   accent-color: #1a4d5c;
+}
+
+.checkbox-label.disabled {
+  color: #a0a8b0;
+  cursor: not-allowed;
+}
+
+.checkbox-label.disabled input {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .job-name-input {
@@ -384,15 +538,16 @@ body {
 
 .error-modal-content {
   background: #fff;
-  padding: 2rem;
+  padding: 1.5rem 1rem;
   border-radius: 8px;
-  max-width: 400px;
-  text-align: center;
+  max-width: 600px;
+  text-align: left;
 }
 
 .error-modal-content h3 {
   color: #9b1c1c;
   margin-bottom: 1rem;
+  text-align: center;
 }
 
 .error-modal-content p {
@@ -401,6 +556,8 @@ body {
 }
 
 .error-modal-content button {
+  display: block;
+  margin: 0 auto;
   padding: 0.5rem 1.5rem;
   background: #1a4d5c;
   color: #fff;
@@ -627,11 +784,10 @@ body {
 }
 
 .sidebar-log-section {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   padding: 0 1rem 1rem;
+  flex-shrink: 0;
 }
 
 .sidebar-log-section h4 {
@@ -851,14 +1007,14 @@ body {
 
 /* Chronos Sidebar */
 .chronos-sidebar {
-  width: 440px;
+  width: 572px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: #fff;
   border-radius: 8px;
   border: 1px solid #e0e5ea;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .chronos-sidebar h3 {
@@ -868,6 +1024,7 @@ body {
   color: #1a4d5c;
   background: #f5f7fa;
   border-bottom: 1px solid #e0e5ea;
+  flex-shrink: 0;
 }
 
 .comparison-status {
@@ -887,6 +1044,7 @@ body {
   align-items: center;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #e0e5ea;
+  flex-shrink: 0;
 }
 
 .chronos-sidebar .files-list {
@@ -937,6 +1095,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .dd-dropdowns select {
@@ -1034,4 +1193,429 @@ body {
   font-size: 0.7rem;
   color: #8a9bac;
   flex-shrink: 0;
+}
+
+/* Multi-file upload list */
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #e0e5ea;
+  margin-bottom: 0.25rem;
+}
+
+.file-count {
+  font-size: 0.8rem;
+  color: #5a6b7c;
+}
+
+.file-clear-all-btn {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  color: #dc3545;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+}
+
+.file-clear-all-btn:hover {
+  text-decoration: underline;
+}
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.file-list-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #1a5d3c;
+  word-break: break-all;
+}
+
+.file-remove-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: #e8f5ee;
+  color: #1a5d3c;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.file-remove-btn:hover {
+  background: #d32f2f;
+  color: #fff;
+}
+
+/* Full-width format select row */
+.format-row {
+  margin-top: 0.75rem;
+}
+
+.format-select-full {
+  flex: 1;
+}
+
+/* Readcount Options (sequence format options) */
+.readcount-options {
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e0e5ea;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.barcode-dropdowns {
+  display: flex;
+  gap: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e5ea;
+}
+
+.read-type-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* Inline input group - label and input on same line */
+.inline-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inline-input-group > span {
+  font-size: 0.85rem;
+  color: #5a6b7c;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.inline-input-group select,
+.inline-input-group input {
+  padding: 0.5rem;
+  border: 1px solid #c0c8d0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+/* Stacked input group (for legacy use) */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.input-group > span {
+  font-size: 0.85rem;
+  color: #5a6b7c;
+  font-weight: 500;
+}
+
+.input-group select,
+.input-group input {
+  padding: 0.5rem;
+  border: 1px solid #c0c8d0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.number-input {
+  width: 100px;
+}
+
+.text-input {
+  min-width: 120px;
+}
+
+.text-input.invalid {
+  border-color: #d32f2f;
+  background: #fff5f5;
+}
+
+/* Find method sections */
+.find-method-section {
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: 4px;
+  border: 1px solid #e8ecf0;
+}
+
+.find-method-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.find-method-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #1a4d5c;
+}
+
+.find-method-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 0.5rem;
+}
+
+/* Checkbox options in readcount options */
+.checkbox-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e0e5ea;
+}
+
+.checkbox-options .checkbox-label {
+  font-size: 0.9rem;
+}
+
+.checkbox-options .checkbox-label.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-options .checkbox-label.disabled input {
+  cursor: not-allowed;
+}
+
+.checkbox-hint {
+  font-size: 0.75rem;
+  color: #8a9bac;
+  margin-left: 0.25rem;
+}
+
+/* Action Section Component */
+.sidebar-actions-list {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.action-section {
+  border: 1px solid #e0e5ea;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.action-section.disabled {
+  opacity: 0.6;
+}
+
+.action-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.action-section-header:hover:not(.disabled) {
+  background: #f0f5f7;
+}
+
+.action-section-header.disabled {
+  cursor: not-allowed;
+}
+
+.action-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: #1a4d5c;
+}
+
+.action-status-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.action-status-icon.pending {
+  color: #8a9bac;
+}
+
+.action-status-icon.ready {
+  color: #1a4d5c;
+}
+
+.action-status-icon.running {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e0e5ea;
+  border-top-color: #1a4d5c;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.action-status-icon.complete {
+  color: #2e7d32;
+}
+
+.action-chevron {
+  transition: transform 0.2s;
+  color: #5a6b7c;
+}
+
+.action-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.action-section-content {
+  padding: 1rem;
+  border-top: 1px solid #e0e5ea;
+  background: #fff;
+}
+
+.action-description {
+  font-size: 0.85rem;
+  color: #5a6b7c;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.action-run-button {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a4d5c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background 0.2s;
+}
+
+.action-run-button:hover:not(:disabled) {
+  background: #0d3a47;
+}
+
+.action-run-button:disabled {
+  background: #b0c0c8;
+  cursor: not-allowed;
+}
+
+/* Compact mode for ReadcountOptions in sidebar */
+.readcount-options-compact {
+  padding: 0;
+  margin: 0 0 0.75rem 0;
+  border: none;
+  background: transparent;
+}
+
+.readcount-options-compact .barcode-dropdowns {
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.readcount-options-compact .read-type-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.readcount-options-compact .find-method-section {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.readcount-options-compact .find-method-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.readcount-options-compact .find-method-inputs {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.readcount-options-compact .checkbox-options {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+/* File assignments for multiple readcount files */
+.file-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e5ea;
+  margin-bottom: 0.5rem;
+}
+
+.file-assignments-header {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #5a6b7c;
+  margin-bottom: 0.25rem;
+}
+
+.file-assignment-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-assignment-name {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #1a2b3c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.file-assignment-row .format-select {
+  flex-shrink: 0;
+  width: auto;
+  min-width: 100px;
 }
