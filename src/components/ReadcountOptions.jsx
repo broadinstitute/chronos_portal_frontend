@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { HelpTooltip } from './HelpTooltip'
+import tooltips from '../tooltips.json'
 
 // Validate DNA sequence (uppercase only: C, A, G, T)
 const isValidPrefix = (str) => /^[CAGT]*$/.test(str)
@@ -14,8 +16,9 @@ const parseIntOrNull = (str) => {
 }
 
 // Sub-component for "How to find..." options
-function FindMethodOptions({ label, prefix, value, onChange }) {
+function FindMethodOptions({ label, prefix, value, onChange, helpKey }) {
   const method = value.method || 'fixed'
+  const helpText = helpKey && tooltips.readcountOptions[helpKey]
 
   const handleMethodChange = (newMethod) => {
     // Reset options when method changes
@@ -38,7 +41,10 @@ function FindMethodOptions({ label, prefix, value, onChange }) {
   return (
     <div className="find-method-section">
       <div className="find-method-row">
-        <span className="find-method-label">{label}</span>
+        <span className="find-method-label">
+          {label}
+          {helpText && <HelpTooltip text={helpText} />}
+        </span>
         <select
           className="format-select"
           value={method}
@@ -343,7 +349,10 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
     <div className={`readcount-options ${compact ? 'readcount-options-compact' : ''}`}>
       <div className="read-type-row">
         <div className="inline-input-group">
-          <span>Read type</span>
+          <span>
+            Read type
+            {tooltips.readcountOptions.readType && <HelpTooltip text={tooltips.readcountOptions.readType} />}
+          </span>
           <select
             className="format-select"
             value={readType}
@@ -361,12 +370,16 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
             onChange={(e) => setAlreadyDeconvoluted(e.target.checked)}
           />
           Already deconvoluted
+          {tooltips.readcountOptions.alreadyDeconvoluted && <HelpTooltip text={tooltips.readcountOptions.alreadyDeconvoluted} />}
         </label>
       </div>
 
       {showFileAssignments && (
         <div className="file-assignments">
-          <div className="file-assignments-header">File assignments</div>
+          <div className="file-assignments-header">
+            File assignments
+            {tooltips.readcountOptions.fileAssignments && <HelpTooltip text={tooltips.readcountOptions.fileAssignments} />}
+          </div>
           {filenames.map((name) => (
             <div key={name} className="file-assignment-row">
               <span className="file-assignment-name" title={name}>{name}</span>
@@ -389,6 +402,7 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
         prefix="sgrna"
         value={sgrnaOptions}
         onChange={setSgrnaOptions}
+        helpKey="sgrnaFindMethod"
       />
 
       {!alreadyDeconvoluted && (
@@ -397,6 +411,7 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
           prefix="sample"
           value={sampleOptions}
           onChange={setSampleOptions}
+          helpKey="sampleFindMethod"
         />
       )}
 
@@ -406,6 +421,7 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
           prefix="sgrnaReversed"
           value={sgrnaReversedOptions}
           onChange={setSgrnaReversedOptions}
+          helpKey="sgrnaReversedFindMethod"
         />
       )}
 
@@ -417,6 +433,7 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
             onChange={(e) => setCountAmbiguous(e.target.checked)}
           />
           Count Ambiguous
+          {tooltips.readcountOptions.countAmbiguous && <HelpTooltip text={tooltips.readcountOptions.countAmbiguous} />}
         </label>
 
         <label className={`checkbox-label ${!canUncheckErrorIfTooShort ? 'disabled' : ''}`}>
@@ -427,6 +444,7 @@ export function ReadcountOptions({ filenames = [], hasCompressed = false, onChan
             disabled={!canUncheckErrorIfTooShort}
           />
           Error if reads are too short
+          {tooltips.readcountOptions.errorIfTooShort && <HelpTooltip text={tooltips.readcountOptions.errorIfTooShort} />}
           {!canUncheckErrorIfTooShort && (
             <span className="checkbox-hint">(requires all methods to be Fixed Location)</span>
           )}

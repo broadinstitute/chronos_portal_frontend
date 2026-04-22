@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { HelpTooltip } from './HelpTooltip'
-
-const PRETRAINED_HELP = "Chronos will use parameters from a model trained on all DepMap data, and only learn the specific parameters for your data. Highly recommended if you want to compare your data to DepMap."
+import tooltips from '../tooltips.json'
 
 export function LibrarySelect({
   onFileSelect,
@@ -184,7 +183,7 @@ export function LibrarySelect({
             disabled={isCustom}
           />
           Use pretrained parameters
-          <HelpTooltip text={PRETRAINED_HELP} />
+          {tooltips.usePretrained && <HelpTooltip text={tooltips.usePretrained} />}
         </label>
       </div>
     </div>

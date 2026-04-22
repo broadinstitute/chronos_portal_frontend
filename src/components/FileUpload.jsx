@@ -1,9 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { HelpTooltip } from './HelpTooltip'
+import tooltips from '../tooltips.json'
 
 const DEFAULT_FORMATS = ['csv', 'tsv']
 const MATRIX_FORMATS = ['csv', 'tsv', 'hdf5']
 const SEQUENCE_FORMATS = ['csv', 'tsv', 'hdf5', 'fastq', 'bam', 'sam']
+
+// Maximum size for matrix format readcounts (10 MB)
+const MAX_MATRIX_SIZE = 10 * 1024 * 1024
+
+// Check if format is a matrix format (not raw sequencing)
+const isMatrixFormat = (format) => ['csv', 'tsv', 'hdf5'].includes(format)
 
 // Check if a file is compressed (zip/gz)
 const isCompressed = (filename) => {
@@ -38,11 +45,20 @@ export function FileUpload({
   })
   const [format, setFormat] = useState(initialValue?.format || 'csv')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [sizeError, setSizeError] = useState(null)
   const inputRef = useRef(null)
 
   // Single file mode handler (backward compatible)
   const handleFile = (selectedFile) => {
     if (!selectedFile) return
+
+    // Check size limit for matrix format readcounts
+    if (allowSequenceFormats && isMatrixFormat(format) && selectedFile.size > MAX_MATRIX_SIZE) {
+      setSizeError(`File exceeds 10 MB limit (${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)`)
+      return
+    }
+    setSizeError(null)
+
     if (allowMultiple) {
       handleFiles([selectedFile])
     } else {
@@ -99,6 +115,11 @@ export function FileUpload({
 
   // Update parent when format changes for already-selected file(s)
   useEffect(() => {
+    // Clear size error if switching to sequence format
+    if (!isMatrixFormat(format)) {
+      setSizeError(null)
+    }
+
     if (allowMultiple && files && files.length > 0) {
       const filenames = files.map((f) => f.name)
       const hasCompressed = files.some((f) => isCompressed(f.name))
@@ -259,9 +280,15 @@ export function FileUpload({
       </div>
       {allowSequenceFormats && (
         <div className="section-row format-row">
-          <span className="section-label">File type</span>
+          <span className="section-label">
+            File type
+            {tooltips.readcountsFileType && <HelpTooltip text={tooltips.readcountsFileType} />}
+          </span>
           {renderFormatSelect()}
         </div>
+      )}
+      {sizeError && (
+        <div className="file-size-error">{sizeError}</div>
       )}
     </div>
   )

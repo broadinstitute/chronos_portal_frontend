@@ -1,0 +1,41 @@
+{
+  "_README": "IMPORTANT: When adding new user inputs to the UI, add an empty string entry here. Components only render tooltips for non-empty strings. This file serves as the single source of truth for all help text in the application.",
+
+  "jobName": "Any text",
+
+  "readcounts": "One or more files containing reads form your experiment. There are two ways to enter readcounts:\n1. A single readcount matrix. This should have sgRNAs as headers, and sequence IDs in the first column, numerical values elsewhere: \n  sequence_ID  AAGTCA  AAGCGG\n  pDNA1             357          41\nIf your columns and index are swapped so sgRNAs are rows, this should still be fine. But you must delete any nonumerical columns besides the first.\n2. A raw sequencing format: FASTQ, SAM, BAM, or a compressed version of these. These will be processed into a readcount matrix with PoolQ using options you specify on the next screen. You can pass multiple files with these format choices, or a zipped archive of multiple files.",
+  "readcountsFileType": "Format of your reads. If HDF5 is specified, reads must be an h5 matrix created by chronos.",
+
+  "conditionMap": "Table with columns: \n- sequence_ID (unique sample identifier, matches row index in readcounts)\n- cell_line_name (use 'pDNA' for early reference samples)\n- days (numerical, number days between guide transfection and collection)\n- pDNA_batch (string, links late timepoints to time 0 counts; if you have no batches in your PCR/sequencing steps, fill everything with the same value).\nOptional: replicate, condition. If you want to compute differential dependency between conditions such as drug treatment, specify the condition for each sample in 'condition'. If you have samples from multiple timepoints for the same condition, specify the relationships between different replicates using 'replicate'.\nIf you choose a raw sequencing format for the readcount files, you must also have a 'barcode' column mapping barcodes to sequence IDs.\nIf the readcount files are already demultiplexed (one file per unique sequenced sample), you must also include a 'file' column mapping sequenced IDs to readcount files.\nIf multiple rows have the same sequence ID, which may be necessary if the same sample was split over multiple wells, they must have the same cell line name, days, pDNA batch, replicate, and condition.",
+
+  "guideMap": "Table with columns: sgrna (guide sequence or unique identifier) and gene (gene mapped to by guide). If passing a readcount matrix, the sgrna column must be the rows or index. If passing raw sequencing files, this column will be used to find reads for each sgRNA. 'sgrna' must be unique.",
+  "librarySelect": "If you performed your screen in either one of the common genome-wide CRISPR libraries listed here, or a subset of one of them, we recommend choosing that library. Otherwise, choose Custom and pass a guide map.",
+  "usePretrained": "Chronos will use parameters from a model trained on all DepMap data, and only learn the specific parameters for your data. Highly recommended if you want to compare your data to DepMap, but not usuable with Custom libraries.",
+
+  "copyNumber": "Cell-line by gene matrix of relative (floating point) copy number. Used to correct for copy number effects after Chronos inference.",
+
+  "negativeControls": "A list of negative control (inert) target genes.",
+  "positiveControls": "A list of positive control (depleting) target genes.",
+
+  "differentialDependency": {
+    "condition1": "The primary condition to compare to",
+    "condition2": "The alternate condition"
+  },
+
+  "readcountOptions": {
+    "readType": "Single or paired end sequencing",
+    "alreadyDeconvoluted": "Check this if you have one file per barcode or one file per sequence ID",
+    "fileAssignments": "Use this if you have separate files for your sample sequencing and sgRNA sequencing, or for forward vs reverse sequencing in paired end sequencing",
+    "sgrnaFindMethod": "How to locate sgRNA reads: either assuming a fixed starting position, or always following a known prefix, or using a template.",
+    "sampleFindMethod": "How to locate sample barcode reads: either assuming a fixed starting position, or always following a known prefix, or using a template. Only needed if samples are multiplexed.",
+    "sgrnaReversedFindMethod": "How to locate sgRNA reads in reverse sequencing: either assuming a fixed starting position, or always following a known prefix, or using a template. NOTE: this policy specifies how you find reads in the sequence file as given, without any reverse complementation being applied.",
+    "findMethodStart": "Only look for barcodes beginning on this base count (zero indexed: first base is 0).",
+    "findMethodEnd": "The length of the read to be searched for. Usually not needed.",
+    "findMethodPrefix": "A fixed sequence that precedes the barcode",
+    "findMethodTemplate": "An arbitrary sequence. Use lowercase letters for bases that need to match, but will not be extracted as part of the reported barcode. Use N for the variable parts of the barcode that are reported, n for wildcards. Given the read sequence TTGCACCGTTGTCTCATGACCTATGTG, notice that the template caccgNNNNctcnnnNNNNa matches only at the 4th base, and will report TTGTACCT as the found barcode.",
+    "findMethodSearchAfter": "Only look for matches starting on or after this base position (zero-indexed)",
+    "findMethodStartsBefore": "Only look for matches *starting* before this base position (zer0-indexed)",
+    "countAmbiguous": "If a fuzzy-matched read maps to more than one barcode, this will count it for every barcode it matches to.",
+    "errorIfTooShort": "By default, PoolQ will error if a FASTQ contains reads too short to contain the specified barcodes. If this is checked, it will skip those reads instead."
+  }
+}

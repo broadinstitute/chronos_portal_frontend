@@ -7,6 +7,8 @@ import { StatusBar } from './components/StatusBar'
 import { ErrorModal } from './components/ErrorModal'
 import { ChronosResultsPage } from './components/ChronosResultsPage'
 import { Sidebar } from './components/Sidebar'
+import { HelpTooltip } from './components/HelpTooltip'
+import tooltips from './tooltips.json'
 
 // Generate a job ID (same format as server)
 function generateJobId(name) {
@@ -21,16 +23,6 @@ function generateJobId(name) {
     String(now.getMinutes()).padStart(2, '0') +
     String(now.getSeconds()).padStart(2, '0')
   return `${sanitized}_${timestamp}`
-}
-
-// Help text from Chronos docstrings
-const HELP_TEXT = {
-  readcounts: "Matrix with sequenced entities (replicates) on rows, guides as column headers, and total readcounts for the guide in the replicate as entries.",
-  condition_map: "Table with columns: sequence_ID (matches row index in readcounts), cell_line (name or 'pDNA'), days (cell days from infection), pDNA_batch (links late timepoints to time 0 counts). Optional: replicate, condition.",
-  guide_map: "Table with columns: sgrna (guide sequence or unique identifier) and gene (gene mapped to by guide).",
-  copy_number: "Cell-line by gene matrix of relative (floating point) copy number. Used to correct for copy number effects after Chronos inference.",
-  negative_controls: "A list of negative control genes.",
-  positive_controls: "A list of positive control genes.",
 }
 
 function App() {
@@ -252,7 +244,10 @@ function App() {
 
         <div className="section">
           <div className="section-row">
-            <span className="section-label">Job name</span>
+            <span className="section-label">
+              Job name
+              {tooltips.jobName && <HelpTooltip text={tooltips.jobName} />}
+            </span>
             <input
               type="text"
               className="job-name-input"
@@ -270,7 +265,7 @@ function App() {
           onFileSelect={handleFileSelect('readcounts')}
           allowSequenceFormats
           allowMultiple
-          helpText={HELP_TEXT.readcounts}
+          helpText={tooltips.readcounts}
           initialValue={pendingFiles.readcounts}
         />
 
@@ -278,7 +273,7 @@ function App() {
           label="Condition map"
           fileType="condition_map"
           onFileSelect={handleFileSelect('condition_map')}
-          helpText={HELP_TEXT.condition_map}
+          helpText={tooltips.conditionMap}
           initialValue={pendingFiles.condition_map}
         />
 
@@ -286,7 +281,7 @@ function App() {
           onFileSelect={handleFileSelect('guide_map')}
           onLibrarySelect={setSelectedLibrary}
           onPretrainedChange={setUsePretrained}
-          helpText={HELP_TEXT.guide_map}
+          helpText={tooltips.guideMap}
           initialSelection={selectedLibrary}
           initialFile={pendingFiles.guide_map}
           initialUsePretrained={usePretrained}
@@ -298,7 +293,7 @@ function App() {
           onFileSelect={handleFileSelect('copy_number')}
           optional
           allowHdf5
-          helpText={HELP_TEXT.copy_number}
+          helpText={tooltips.copyNumber}
           initialValue={pendingFiles.copy_number}
         />
 
@@ -308,7 +303,7 @@ function App() {
             fileType="negative_controls"
             onFileSelect={handleFileSelect('negative_controls')}
             optional
-            helpText={HELP_TEXT.negative_controls}
+            helpText={tooltips.negativeControls}
             initialValue={pendingFiles.negative_controls}
           />
           <ControlsUpload
@@ -316,7 +311,7 @@ function App() {
             fileType="positive_controls"
             onFileSelect={handleFileSelect('positive_controls')}
             optional
-            helpText={HELP_TEXT.positive_controls}
+            helpText={tooltips.positiveControls}
             initialValue={pendingFiles.positive_controls}
           />
         </div>

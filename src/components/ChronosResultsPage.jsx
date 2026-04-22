@@ -277,6 +277,11 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
       } else if (lastMessage.status === 'preprocessing_complete') {
         setPreprocessingRunning(false)
         fetchJobStatus()
+        // Refresh file list (readcounts.csv now available)
+        fetch(`/api/outputs/${jobId}`)
+          .then((res) => res.json())
+          .then((data) => setFiles(data.files || []))
+          .catch((err) => console.error('Failed to refresh files:', err))
       } else if (lastMessage.status === 'complete') {
         // Initial QC completed
         setQcRunning(false)
@@ -325,6 +330,64 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
       }
     }
   }, [lastMessage, jobId])
+
+  // Fallback polling when actions are running (in case WebSocket messages are missed)
+  useEffect(() => {
+    const anyRunning = preprocessingRunning || qcRunning || chronosRunning || comparisonRunning
+    if (!anyRunning) return
+
+    const poll = async () => {
+      const status = await fetchJobStatus()
+      if (!status) return
+
+      // Sync running states with actual completion status
+      if (status.preprocessing_complete && preprocessingRunning) {
+        setPreprocessingRunning(false)
+        // Refresh file list
+        try {
+          const filesRes = await fetch(`/api/outputs/${jobId}`)
+          if (filesRes.ok) {
+            const data = await filesRes.json()
+            setFiles(data.files || [])
+          }
+        } catch (err) {
+          console.error('Failed to refresh files:', err)
+        }
+      }
+      if (status.qc_completed && qcRunning) {
+        setQcRunning(false)
+        fetchInitialQcReport()
+        // Refresh file list
+        try {
+          const filesRes = await fetch(`/api/outputs/${jobId}`)
+          if (filesRes.ok) {
+            const data = await filesRes.json()
+            setFiles(data.files || [])
+          }
+        } catch (err) {
+          console.error('Failed to refresh files:', err)
+        }
+      }
+      if (status.chronos_completed && chronosRunning) {
+        setChronosRunning(false)
+        fetchQcReport()
+        fetchHitsReport()
+        // Refresh file list
+        try {
+          const filesRes = await fetch(`/api/outputs/${jobId}`)
+          if (filesRes.ok) {
+            const data = await filesRes.json()
+            setFiles(data.files)
+          }
+        } catch (err) {
+          console.error('Failed to refresh files:', err)
+        }
+      }
+    }
+
+    const interval = setInterval(poll, 10000) // Poll every 10 seconds
+    return () => clearInterval(interval)
+  }, [preprocessingRunning, qcRunning, chronosRunning, comparisonRunning, jobId])
 
   const toggleSelect = (file) => {
     const key = fileKey(file)
@@ -695,6 +758,9 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
                 onToggle={() => setExpandedAction(expandedAction === 'preprocessing' ? null : 'preprocessing')}
                 status={getPreprocessingStatus()}
               >
+                <p className="action-description">
+                  Run PoolQ and generate a sample by sgRNA readcount matrix.
+                </p>
                 <ReadcountOptions
                   filenames={readcountFilenames}
                   hasCompressed={false}
