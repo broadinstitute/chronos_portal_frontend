@@ -480,12 +480,12 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
 
       if (!response.ok) {
         const result = await response.json()
-        console.error('Failed to start differential dependency:', result.detail)
+        setError(result.detail)
         setComparisonRunning(false)
         setDdReportLoading(false)
       }
     } catch (err) {
-      console.error('Failed to start differential dependency:', err)
+      setError(err.message)
       setComparisonRunning(false)
       setDdReportLoading(false)
     }
@@ -511,11 +511,11 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
       })
       if (!res.ok) {
         const result = await res.json()
-        console.error('Failed to start preprocessing:', result.detail)
+        setError(result.detail)
         setPreprocessingRunning(false)
       }
     } catch (err) {
-      console.error('Failed to start preprocessing:', err)
+      setError(err.message)
       setPreprocessingRunning(false)
     }
   }
@@ -532,11 +532,11 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
       })
       if (!res.ok) {
         const result = await res.json()
-        console.error('Failed to start QC:', result.detail)
+        setError(result.detail)
         setQcRunning(false)
       }
     } catch (err) {
-      console.error('Failed to start QC:', err)
+      setError(err.message)
       setQcRunning(false)
     }
   }
@@ -553,11 +553,11 @@ export function ChronosResultsPage({ jobId, initialLog = '', onBack }) {
       })
       if (!res.ok) {
         const result = await res.json()
-        console.error('Failed to start Chronos:', result.detail)
+        setError(result.detail)
         setChronosRunning(false)
       }
     } catch (err) {
-      console.error('Failed to start Chronos:', err)
+      setError(err.message)
       setChronosRunning(false)
     }
   }
